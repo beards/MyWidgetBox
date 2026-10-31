@@ -4,6 +4,10 @@ import type { MessageTables } from '../shared/i18n';
 export type DiceMessageKey =
   | 'title'
   | 'roll'
+  | 'reset'
+  | 'animationDuration'
+  | 'seconds'
+  | 'alwaysFullAnimation'
   | 'diceSet'
   | 'addDie'
   | 'removeDie'
@@ -38,6 +42,10 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     ...appearanceMessages.en,
     title: 'Dice · MyWidgetBox',
     roll: 'Roll',
+    reset: 'Reset',
+    animationDuration: 'Animation length',
+    seconds: '{seconds} s',
+    alwaysFullAnimation: 'Always play the full animation (ignore reduced motion)',
     diceSet: 'Dice set',
     addDie: 'Add',
     removeDie: 'Remove {label}',
@@ -71,6 +79,10 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     ...appearanceMessages['zh-Hant'],
     title: '骰子 · MyWidgetBox',
     roll: '擲骰',
+    reset: '重置',
+    animationDuration: '動畫長度',
+    seconds: '{seconds} 秒',
+    alwaysFullAnimation: '永遠播放完整動畫（忽略「減少動態效果」）',
     diceSet: '骰組',
     addDie: '加入',
     removeDie: '移除 {label}',

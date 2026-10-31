@@ -16,6 +16,6 @@
 
 - `shared/appearance.ts`: `Appearance` baseline (`background: { kind: 'solid'|'transparent'|'image', color, imageUrl }`, `fontFamily`, `fontSize`, `textColor`, `scale`), defaults and `isAppearance()`; Widgets extend the interface with their own items.
 - `shared/appearance-dom.ts`: `applyAppearance()` (sole owner of the page background; `forceTransparent` serves the Share link `transparent` Display-mode flag) and `mountAppearancePanel()` with live preview and extra Widget color fields; text in `shared/appearance-messages.ts`.
-- Dice: `DiceSettings.appearance` adds `dieColor` / `pipColor`, `setAppearance()` validates; old Settings get the default appearance by default-filling (no version bump).
+- Dice: `DiceSettings.appearance` adds `dieColor` / `pipColor` (passed live to the three.js scene via `scene.setColors()`), `setAppearance()` validates; old Settings get the default appearance by default-filling (no version bump).
 - Tests through the dice controller: defaults, persistence, per-Preset, invalid values ignored, old/partial stored Settings filled, Share link round trip without writing storage.
 - Verified in the browser with agent-browser (image/solid/transparent background, font, colors, scale from a Share link, Display mode + transparent). OBS overlay itself still needs manual verification.

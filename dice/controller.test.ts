@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { createBrowserRandom } from '../shared/env';
-import { createTestEnv } from '../shared/test-env';
 import { settingsStorageKey } from '../shared/settings';
 import { createShareLink } from '../shared/share-link';
-import { DIE_SIDES, type DiceAppearance, type DieSides, createDiceController, formatOutcome } from './controller';
+import { createTestEnv } from '../shared/test-env';
+import {
+  DIE_SIDES,
+  type DiceAppearance,
+  type DiceController,
+  type DieSides,
+  REDUCED_MOTION_DURATION,
+  animationFor,
+  createDiceController,
+  formatOutcome,
+} from './controller';
 
 describe('dice controller', () => {
   it('has no Outcome before the first roll', () => {
@@ -19,11 +28,11 @@ describe('dice controller', () => {
   it('rolls 1d6 from the injected random source', () => {
     const dice = createDiceController(createTestEnv({ random: [0, 5, 7] }));
 
-    dice.roll();
+    rollAndFinish(dice);
     expect(dice.getState().outcome).toEqual({ rolls: [{ sides: 6, value: 1 }], modifier: 0, total: 1 });
-    dice.roll();
+    rollAndFinish(dice);
     expect(dice.getState().outcome!.total).toBe(6);
-    dice.roll();
+    rollAndFinish(dice);
     expect(dice.getState().outcome!.total).toBe(2);
   });
 
@@ -51,7 +60,7 @@ describe('dice controller', () => {
 
     dice.roll();
     unsubscribe();
-    dice.roll();
+    rollAndFinish(dice);
     expect(calls).toBe(1);
   });
 
@@ -136,7 +145,7 @@ describe('dice controller', () => {
   it('keeps the 20 most recent Outcomes, newest first', () => {
     const random = Array.from({ length: 25 }, (_, i) => i % 6);
     const dice = createDiceController(createTestEnv({ random }));
-    for (let i = 0; i < 25; i++) dice.roll();
+    for (let i = 0; i < 25; i++) rollAndFinish(dice);
 
     const totals = dice.getState().history.map((outcome) => outcome.total);
     // Rolls 6..25 survive (values (i % 6) + 1 for i = 24 down to 5).
@@ -161,6 +170,86 @@ describe('dice controller', () => {
     expect(formatOutcome({ rolls: [{ sides: 6, value: 4 }], modifier: 0, total: 4 })).toBe('4');
   });
 
+  it('is animating after a roll until the view reports the animation finished', () => {
+    const dice = createDiceController(createTestEnv({ random: [2] }));
+    expect(dice.getState().animating).toBe(false);
+
+    dice.roll();
+    expect(dice.getState().animating).toBe(true);
+    expect(dice.getState().outcome!.total).toBe(3);
+    dice.finishAnimation();
+    expect(dice.getState().animating).toBe(false);
+  });
+
+  it('ignores rolls while animating', () => {
+    const dice = createDiceController(createTestEnv({ random: [2, 4] }));
+    dice.roll();
+    const first = dice.getState().outcome;
+
+    dice.roll();
+    expect(dice.getState().outcome).toBe(first);
+    expect(dice.getState().history).toHaveLength(1);
+    dice.finishAnimation();
+    dice.roll();
+    expect(dice.getState().outcome!.total).toBe(5);
+  });
+
+  it('reset clears the Outcome and history but keeps the dice set', () => {
+    const dice = createDiceController(createTestEnv({ random: [2, 4] }));
+    dice.setModifier(2);
+    rollAndFinish(dice);
+    rollAndFinish(dice);
+
+    dice.reset();
+    expect(dice.getState().outcome).toBeNull();
+    expect(dice.getState().history).toEqual([]);
+    expect(dice.getState().diceSet).toEqual({ groups: [{ sides: 6, count: 1 }], modifier: 2 });
+  });
+
+  it('ignores reset while animating', () => {
+    const dice = createDiceController(createTestEnv({ random: [2] }));
+    dice.roll();
+
+    dice.reset();
+    expect(dice.getState().outcome!.total).toBe(3);
+    expect(dice.getState().animating).toBe(true);
+  });
+
+  it('plays a full-length animation of the chosen duration', () => {
+    const dice = createDiceController(createTestEnv());
+    expect(animationFor(dice.getState(), false)).toEqual({ duration: 3000, reduced: false });
+
+    dice.setAnimationDuration(7500);
+    expect(animationFor(dice.getState(), false)).toEqual({ duration: 7500, reduced: false });
+  });
+
+  it('keeps the animation duration between 1 and 10 seconds', () => {
+    const dice = createDiceController(createTestEnv());
+    dice.setAnimationDuration(999);
+    dice.setAnimationDuration(10_001);
+    dice.setAnimationDuration(Number.NaN);
+    expect(dice.getState().animationDuration).toBe(3000);
+    dice.setAnimationDuration(1000);
+    expect(dice.getState().animationDuration).toBe(1000);
+    dice.setAnimationDuration(10_000);
+    expect(dice.getState().animationDuration).toBe(10_000);
+  });
+
+  it('shortens the animation when the system asks for reduced motion', () => {
+    const dice = createDiceController(createTestEnv());
+    dice.setAnimationDuration(7500);
+    expect(animationFor(dice.getState(), true)).toEqual({ duration: REDUCED_MOTION_DURATION, reduced: true });
+    expect(REDUCED_MOTION_DURATION).toBeLessThan(1000);
+  });
+
+  it('can be overridden to always play the full animation', () => {
+    const dice = createDiceController(createTestEnv());
+    expect(dice.getState().alwaysFullAnimation).toBe(false);
+
+    dice.setAlwaysFullAnimation(true);
+    expect(animationFor(dice.getState(), true)).toEqual({ duration: 3000, reduced: false });
+  });
+
   // Chi-square critical values at p = 0.001 for (sides - 1) degrees of freedom.
   const CRITICAL_VALUES: Record<DieSides, number> = {
     4: 16.266,
@@ -180,7 +269,7 @@ describe('dice controller', () => {
     const rolls = expected * sides;
     const counts = new Array<number>(sides).fill(0);
     for (let i = 0; i < rolls; i++) {
-      dice.roll();
+      rollAndFinish(dice);
       const value = dice.getState().outcome!.rolls[0]!.value;
       counts[value - 1]!++;
     }
@@ -206,6 +295,27 @@ describe('dice Settings persistence and Presets', () => {
       ],
       modifier: 3,
     });
+  });
+
+  it('remembers the animation length and the full-animation override after a reload', () => {
+    const env = createTestEnv();
+    const before = createDiceController(env);
+    before.setAnimationDuration(6500);
+    before.setAlwaysFullAnimation(true);
+
+    const after = createDiceController(env);
+    expect(after.getState().animationDuration).toBe(6500);
+    expect(after.getState().alwaysFullAnimation).toBe(true);
+  });
+
+  it('keeps animation settings per Preset', () => {
+    const dice = createDiceController(createTestEnv());
+    const first = dice.getState().selectedPresetId!;
+    dice.createPreset('Slow');
+    dice.setAnimationDuration(9000);
+
+    dice.selectPreset(first);
+    expect(dice.getState().animationDuration).toBe(3000);
   });
 
   it.each(['{not json', '"text"', '{"version":1,"presets":[]}', '{"version":99,"presets":[{"id":"1","name":"","settings":{}}]}'])(
@@ -342,15 +452,15 @@ describe('dice appearance Settings', () => {
     pipColor: '#00ff00',
   };
 
-  it('opens with a solid white background, white dice with dark pips and no scaling', () => {
+  it('opens with a solid white background, ivory dice with dark pips and no scaling', () => {
     expect(createDiceController(createTestEnv()).getState().appearance).toEqual({
       background: { kind: 'solid', color: '#ffffff', imageUrl: '' },
       fontFamily: '',
       fontSize: 20,
       textColor: '#222222',
       scale: 1,
-      dieColor: '#ffffff',
-      pipColor: '#222222',
+      dieColor: '#f7f3e8',
+      pipColor: '#1f1f1f',
     });
   });
 
@@ -443,7 +553,7 @@ describe('dice appearance Settings', () => {
       }),
     );
 
-    expect(createDiceController(env).getState().appearance).toEqual({ ...custom, scale: 1, pipColor: '#222222' });
+    expect(createDiceController(env).getState().appearance).toEqual({ ...custom, scale: 1, pipColor: '#1f1f1f' });
   });
 
   it('opens a Share link with the same appearance, without writing it to storage', () => {
@@ -479,6 +589,16 @@ describe('dice Share link', () => {
 
     const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
     expect(opened.getState().diceSet).toEqual(sharer.getState().diceSet);
+  });
+
+  it('carries the animation settings in a Share link', () => {
+    const sharer = createDiceController(createTestEnv({ url: page }));
+    sharer.setAnimationDuration(1500);
+    sharer.setAlwaysFullAnimation(true);
+
+    const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
+    expect(opened.getState().animationDuration).toBe(1500);
+    expect(opened.getState().alwaysFullAnimation).toBe(true);
   });
 
   function sharedD20Link() {
@@ -532,6 +652,11 @@ describe('dice Share link', () => {
       ],
       modifier: 3,
     });
+    // Links from before the animation settings existed open with the default animation.
+    expect(createDiceController(createTestEnv({ url: link })).getState()).toMatchObject({
+      animationDuration: 3000,
+      alwaysFullAnimation: false,
+    });
   });
 
   it('falls back to stored Settings when the Share link is damaged', () => {
@@ -578,4 +703,10 @@ describe('dice Settings export / import', () => {
 /** Production random source (crypto.getRandomValues) with test doubles for browser-only parts. */
 function createBrowserEnvForNode() {
   return { ...createTestEnv(), randomUint32: createBrowserRandom() };
+}
+
+/** One complete roll: decide the Outcome, then report the animation finished as the view would. */
+function rollAndFinish(dice: DiceController) {
+  dice.roll();
+  dice.finishAnimation();
 }

@@ -49,6 +49,14 @@ export interface DiceAppearance extends Appearance {
 export interface DiceSettings {
   diceSet: DiceSet;
   appearance: DiceAppearance;
+  animation: AnimationSettings;
+}
+
+export interface AnimationSettings {
+  /** Length of a full roll animation in ms, MIN_ANIMATION_DURATION..MAX_ANIMATION_DURATION. */
+  duration: number;
+  /** Play the full animation even when the system asks for reduced motion. */
+  alwaysFull: boolean;
 }
 
 export interface DiceState {
@@ -62,6 +70,11 @@ export interface DiceState {
   outcome: DiceOutcome | null;
   /** The most recent Outcomes, newest first, at most HISTORY_LIMIT; kept in memory only. */
   history: DiceOutcome[];
+  /** True from a roll until the view reports its animation finished; rolls are ignored meanwhile. */
+  animating: boolean;
+  /** The animation Settings in effect (see AnimationSettings). */
+  animationDuration: number;
+  alwaysFullAnimation: boolean;
 }
 
 export interface DiceController {
@@ -78,7 +91,15 @@ export interface DiceController {
   setModifier(modifier: number): void;
   /** Replaces the appearance (applied live); invalid appearances are ignored. */
   setAppearance(appearance: DiceAppearance): void;
+  /** Decides a new Outcome and starts animating it; ignored while animating. */
   roll(): void;
+  /** Called by the view when the animation of the current Outcome has finished. */
+  finishAnimation(): void;
+  /** Clears the Outcome and history (the dice set is kept); ignored while animating. */
+  reset(): void;
+  /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
+  setAnimationDuration(ms: number): void;
+  setAlwaysFullAnimation(always: boolean): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
   selectPreset(id: string): void;
@@ -95,20 +116,38 @@ export interface DiceController {
 
 export const MAX_DICE_PER_KIND = 99;
 export const HISTORY_LIMIT = 20;
+export const MIN_ANIMATION_DURATION = 1000;
+export const MAX_ANIMATION_DURATION = 10_000;
+/** Duration of the quick reveal that replaces the roll animation under reduced motion. */
+export const REDUCED_MOTION_DURATION = 300;
 
 export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
   namespace: 'dice',
   version: 1,
+  // Fields added later need no version bump: missing ones are filled from these defaults.
   defaults: {
     diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
-    appearance: { ...appearanceDefaults, dieColor: '#ffffff', pipColor: '#222222' },
+    animation: { duration: 3000, alwaysFull: false },
+    appearance: { ...appearanceDefaults, dieColor: '#f7f3e8', pipColor: '#1f1f1f' },
   },
   isValid: (settings): settings is DiceSettings =>
-    isDiceSet((settings as DiceSettings).diceSet) && isDiceAppearance((settings as DiceSettings).appearance),
+    isDiceSet((settings as DiceSettings).diceSet) &&
+    isAnimationSettings((settings as DiceSettings).animation) &&
+    isDiceAppearance((settings as DiceSettings).appearance),
 };
 
 function isDiceAppearance(value: unknown): value is DiceAppearance {
-  return isAppearance(value) && isHexColor((value as DiceAppearance).dieColor) && isHexColor((value as DiceAppearance).pipColor);
+  const { dieColor, pipColor } = (value ?? {}) as Partial<DiceAppearance>;
+  return isAppearance(value) && isHexColor(dieColor) && isHexColor(pipColor);
+}
+
+function isValidDuration(duration: unknown): duration is number {
+  return typeof duration === 'number' && duration >= MIN_ANIMATION_DURATION && duration <= MAX_ANIMATION_DURATION;
+}
+
+function isAnimationSettings(value: unknown): value is AnimationSettings {
+  const { duration, alwaysFull } = (value ?? {}) as Partial<AnimationSettings>;
+  return isValidDuration(duration) && typeof alwaysFull === 'boolean';
 }
 
 function isDiceSet(value: unknown): value is DiceSet {
@@ -137,12 +176,24 @@ export function createDiceController(
   settingsOptions: SettingsStoreOptions = { readUrl: readShareLinkSettings },
 ): DiceController {
   const settings = createSettingsStore(env, diceSettingsSchema, settingsOptions);
-  let state: DiceState = { ...fromSettings(), outcome: null, history: [] };
+  let state: DiceState = {
+    ...fromSettings(),
+    outcome: null,
+    history: [],
+    animating: false,
+  };
   const listeners = new Set<(state: DiceState) => void>();
 
   function fromSettings() {
     const { settings: current, presets, selectedPresetId } = settings.getSnapshot();
-    return { diceSet: current.diceSet, appearance: current.appearance, presets, selectedPresetId };
+    return {
+      diceSet: current.diceSet,
+      appearance: current.appearance,
+      animationDuration: current.animation.duration,
+      alwaysFullAnimation: current.animation.alwaysFull,
+      presets,
+      selectedPresetId,
+    };
   }
 
   function update(next: Partial<DiceState>) {
@@ -156,8 +207,16 @@ export function createDiceController(
     update(fromSettings());
   }
 
+  function updateSettings(next: Partial<DiceSettings>) {
+    changeSettings(() => settings.update({ ...settings.getSnapshot().settings, ...next }));
+  }
+
   function setDiceSet(diceSet: DiceSet) {
-    changeSettings(() => settings.update({ ...settings.getSnapshot().settings, diceSet }));
+    updateSettings({ diceSet });
+  }
+
+  function setAnimation(next: Partial<AnimationSettings>) {
+    updateSettings({ animation: { ...settings.getSnapshot().settings.animation, ...next } });
   }
 
   function setGroups(groups: DiceGroup[]) {
@@ -198,14 +257,25 @@ export function createDiceController(
       changeSettings(() => settings.update({ ...settings.getSnapshot().settings, appearance }));
     },
     roll() {
+      if (state.animating) return;
       const { groups, modifier } = state.diceSet;
       const rolls = groups.flatMap(({ sides, count }) =>
         Array.from({ length: count }, () => ({ sides, value: randomBelow(env.randomUint32, sides) + 1 })),
       );
       const total = rolls.reduce((sum, roll) => sum + roll.value, modifier);
       const outcome = { rolls, modifier, total };
-      update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT) });
+      update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT), animating: true });
     },
+    finishAnimation() {
+      if (state.animating) update({ animating: false });
+    },
+    reset() {
+      if (!state.animating) update({ outcome: null, history: [] });
+    },
+    setAnimationDuration(ms) {
+      if (isValidDuration(ms)) setAnimation({ duration: ms });
+    },
+    setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
     createPreset: (name) => changeSettings(() => settings.createPreset(name)),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
@@ -219,6 +289,15 @@ export function createDiceController(
       return true;
     },
   };
+}
+
+/** How the view should animate a roll, given whether the system asks for reduced motion. */
+export function animationFor(
+  { animationDuration, alwaysFullAnimation }: DiceState,
+  prefersReducedMotion: boolean,
+): { duration: number; reduced: boolean } {
+  const reduced = prefersReducedMotion && !alwaysFullAnimation;
+  return { duration: reduced ? REDUCED_MOTION_DURATION : animationDuration, reduced };
 }
 
 /** Total and breakdown, e.g. `17 = 12 + 3 + 2`; just the total when there is nothing to break down. */

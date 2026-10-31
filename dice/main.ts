@@ -5,8 +5,20 @@ import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { applyDisplayMode } from '../shared/display-mode';
 import { readDisplayOptions } from '../shared/share-link';
-import { DIE_SIDES, MAX_DICE_PER_KIND, type DiceAppearance, type DiceState, type DieSides, createDiceController, formatOutcome } from './controller';
+import {
+  DIE_SIDES,
+  MAX_DICE_PER_KIND,
+  type DiceAppearance,
+  type DiceOutcome,
+  type DiceSet,
+  type DiceState,
+  type DieSides,
+  animationFor,
+  createDiceController,
+  formatOutcome,
+} from './controller';
 import { messages } from './messages';
+import { createDiceScene } from './scene';
 
 const env = createBrowserEnv();
 const displayOptions = readDisplayOptions(env.url);
@@ -41,7 +53,16 @@ const shareUrl = $<HTMLInputElement>('#share-url');
 const settingsExport = $<HTMLButtonElement>('#settings-export');
 const settingsImport = $<HTMLInputElement>('#settings-import');
 const importError = $('#settings-import-error');
-const stage = $('#stage');
+const resetButton = $<HTMLButtonElement>('#reset');
+const durationInput = $<HTMLInputElement>('#duration');
+const durationValue = $<HTMLOutputElement>('#duration-value');
+const alwaysFullInput = $<HTMLInputElement>('#always-full');
+
+const scene = createDiceScene(die);
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+/** The Outcome currently being animated, so each roll starts its animation exactly once. */
+let playing: DiceOutcome | null = null;
+const display = $('#display');
 const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelector<HTMLElement>('#appearance')!, {
   i18n,
   fields: [
@@ -61,14 +82,10 @@ function renderAddSides() {
   );
 }
 
-function render({ diceSet, appearance, presets, selectedPresetId, outcome, history }: DiceState) {
-  applyAppearance(
-    appearance,
-    { page: document.documentElement, display: stage },
-    { forceTransparent: displayOptions.transparent },
-  );
-  die.style.setProperty('--die-color', appearance.dieColor);
-  die.style.setProperty('--pip-color', appearance.pipColor);
+function render(state: DiceState) {
+  const { diceSet, appearance, presets, selectedPresetId, outcome, history, animating } = state;
+  applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
+  scene.setColors({ body: appearance.dieColor, label: appearance.pipColor });
   appearancePanel.update(appearance);
 
   presetSelect.replaceChildren(
@@ -81,9 +98,18 @@ function render({ diceSet, appearance, presets, selectedPresetId, outcome, histo
   presetName.disabled = !selected;
   presetDelete.disabled = !selected || presets.length === 1;
 
-  die.textContent = outcome ? String(outcome.total) : '?';
-  breakdown.textContent = outcome ? formatOutcome(outcome) : '';
+  if (animating && outcome && outcome !== playing) {
+    playing = outcome;
+    scene.play(outcome.rolls, animationFor(state, reducedMotion.matches), () => dice.finishAnimation());
+  } else if (!animating) {
+    scene.show(outcome ? outcome.rolls : restingDice(diceSet));
+  }
+  // The Outcome is revealed once the dice have landed.
+  breakdown.textContent = outcome && !animating ? formatOutcome(outcome) : '';
   modifierInput.value = String(diceSet.modifier);
+  durationInput.value = String(state.animationDuration / 1000);
+  durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
+  alwaysFullInput.checked = state.alwaysFullAnimation;
 
   groupList.replaceChildren(
     ...diceSet.groups.map(({ sides, count }) => {
@@ -111,13 +137,19 @@ function render({ diceSet, appearance, presets, selectedPresetId, outcome, histo
 
   shareUrl.value = shareLink();
 
+  // While animating, the newest entry would give the Outcome away before the dice land.
   historyList.replaceChildren(
-    ...history.map((entry) => {
+    ...history.slice(animating ? 1 : 0).map((entry) => {
       const item = document.createElement('li');
       item.textContent = formatOutcome(entry);
       return item;
     }),
   );
+}
+
+/** Before the first roll, show the dice set with every die on its highest face. */
+function restingDice({ groups }: DiceSet) {
+  return groups.flatMap(({ sides, count }) => Array.from({ length: count }, () => ({ sides, value: sides })));
 }
 
 function shareLink() {
@@ -143,12 +175,16 @@ renderAddSides();
 render(dice.getState());
 
 die.addEventListener('click', () => dice.roll());
-// Space rolls from anywhere (also in Display mode), except while typing or on a focused control.
+// Space rolls and R resets from anywhere (also in Display mode), except while typing or on a focused control.
 document.addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.repeat) return;
+  if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target instanceof Element && event.target.closest('input, select, textarea, button')) return;
-  event.preventDefault();
-  dice.roll();
+  if (event.code === 'Space') {
+    event.preventDefault();
+    dice.roll();
+  } else if (event.key === 'r' || event.key === 'R') {
+    dice.reset();
+  }
 });
 rollButton.addEventListener('click', () => dice.roll());
 addButton.addEventListener('click', () => dice.addDie(Number(addSides.value) as DieSides));
@@ -180,6 +216,9 @@ shareCopy.addEventListener('click', async () => {
   }
 });
 shareUrl.addEventListener('focus', () => shareUrl.select());
+resetButton.addEventListener('click', () => dice.reset());
+durationInput.addEventListener('input', () => dice.setAnimationDuration(Number(durationInput.value) * 1000));
+alwaysFullInput.addEventListener('change', () => dice.setAlwaysFullAnimation(alwaysFullInput.checked));
 settingsExport.addEventListener('click', () => {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));

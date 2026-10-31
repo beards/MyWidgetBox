@@ -13,26 +13,32 @@ body {
   gap: 1.5rem;
 }
 
-/* Font and scale come from the appearance Settings (applied inline); sizes follow them in em. */
-.dice__stage {
+/* Font, text color and scale come from the appearance Settings (applied inline). */
+.dice__display {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1.5rem;
 }
 
-.dice__die {
-  /* 3.2em of the 20px default text size = the original 4rem. */
-  font-size: 3.2em;
-  font-family: inherit;
-  width: 2em;
-  height: 2em;
-  border: 3px solid var(--pip-color, #222);
-  border-radius: 0.25em;
-  background: var(--die-color, #fff);
-  color: var(--pip-color, #222);
-  font-weight: bold;
+.dice__stage {
+  width: min(90vw, 40rem);
+  height: min(60vh, 20rem);
+  padding: 0;
+  border: none;
+  background: none;
   cursor: pointer;
+}
+
+.dice__stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dice__actions {
+  display: flex;
+  gap: 0.75rem;
 }
 
 .dice__language {
@@ -81,7 +87,9 @@ body {
 .dice__appearance label,
 .dice__presets,
 .dice__add,
-.dice__modifier {
+.dice__modifier,
+.dice__duration,
+.dice__full-animation {
   display: flex;
   align-items: center;
   gap: 0.5rem;
