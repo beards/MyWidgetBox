@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // One directory per Widget, each with its own index.html entry.
 // Adding a Widget = adding its directory name here (see README).
@@ -11,6 +11,8 @@ export default defineConfig({
   base: '/MyWidgetBox/',
   // Multi-page: serve each directory's index.html instead of falling back to the root page.
   appType: 'mpa',
+  // Agent worktrees live under .claude/; keep them out of test runs.
+  test: { exclude: [...configDefaults.exclude, '.claude/**'] },
   build: {
     rollupOptions: {
       input: {
