@@ -9,6 +9,11 @@ export interface Env {
   /** Current time in milliseconds since the Unix epoch. */
   now: () => number;
   storage: KeyValueStorage;
+  /**
+   * Calls listener when another tab (same origin) changed `storage`, with the changed key
+   * (null when it was cleared). Returns an unsubscribe function.
+   */
+  onStorageChange(listener: (key: string | null) => void): () => void;
   url: URL;
 }
 
@@ -30,6 +35,13 @@ export function createBrowserEnv(): Env {
     randomUint32: createBrowserRandom(),
     now: () => Date.now(),
     storage: localStorage,
+    onStorageChange(listener) {
+      const handle = (event: StorageEvent) => {
+        if (event.storageArea === localStorage) listener(event.key);
+      };
+      window.addEventListener('storage', handle);
+      return () => window.removeEventListener('storage', handle);
+    },
     url: new URL(location.href),
   };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../shared/env';
 import { createTestEnv } from '../shared/test-env';
-import { MAX_DURATION, createTimerController, formatTimer, readAlert, readTimer, visibleTimers } from './controller';
+import { MAX_DURATION, TIMER_STATE_KEY, createTimerController, formatTimer, readAlert, readTimer, visibleTimers } from './controller';
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -231,6 +231,32 @@ describe('reload', () => {
   });
 });
 
+describe('two tabs', () => {
+  it('a tab picks up runs another tab changed', () => {
+    const { env, timer, id } = setup();
+    const otherTab = createTestEnv({ now: env.now(), storage: env.storage });
+    const other = open(otherTab);
+    timer.start(id);
+    env.advance(MINUTE);
+    otherTab.advance(MINUTE);
+    otherTab.notifyStorageChange(TIMER_STATE_KEY);
+    expect(other.read()).toEqual({ value: 4 * MINUTE, status: 'running' });
+  });
+
+  it('tabs do not overwrite each other\'s runs', () => {
+    const { env, timer, id } = setup();
+    const second = timer.addTimer();
+    const otherTab = createTestEnv({ now: env.now(), storage: env.storage });
+    const other = open(otherTab);
+    // Neither tab has heard of the other's change when it writes.
+    timer.start(id);
+    other.timer.start(second);
+    const reopened = open(env).timer;
+    expect(readTimer(view(reopened, id), env.now()).status).toBe('running');
+    expect(readTimer(view(reopened, second), env.now()).status).toBe('running');
+  });
+});
+
 describe('Settings', () => {
   it('remembers the mode and duration across reloads', () => {
     const { env, timer, id } = setup();
@@ -254,15 +280,82 @@ describe('Settings', () => {
     expect(opened.timer.getState().selectedPresetId).toBeNull();
   });
 
-  it('switching Presets keeps the timer running', () => {
+  it('a run belongs to the Preset it was started in', () => {
     const { env, timer, read, id } = setup();
     timer.setMode(id, 'stopwatch');
     const original = timer.getState().selectedPresetId!;
     timer.createPreset('Other');
+    const other = timer.getState().selectedPresetId!;
     timer.start(id);
     env.advance(5 * SECOND);
     timer.selectPreset(original);
-    expect(read()).toEqual({ value: 5 * SECOND, status: 'running' });
+    expect(read()).toEqual({ value: 0, status: 'idle' });
+    env.advance(5 * SECOND);
+    timer.selectPreset(other);
+    expect(read()).toEqual({ value: 10 * SECOND, status: 'running' });
+  });
+
+  it('saving a Preset keeps the runs of the Settings it was saved from', () => {
+    const { env, timer, read, id } = setup();
+    timer.start(id);
+    env.advance(MINUTE);
+    timer.createPreset('Copy');
+    expect(read()).toEqual({ value: 4 * MINUTE, status: 'running' });
+  });
+
+  it('a Preset created in place of a deleted one does not inherit its runs', () => {
+    const { env, timer, read, id } = setup();
+    const original = timer.getState().selectedPresetId!;
+    timer.createPreset('Temp');
+    const temp = timer.getState().selectedPresetId!;
+    timer.start(id);
+    env.advance(MINUTE);
+    timer.deletePreset(temp);
+    timer.selectPreset(original);
+    timer.createPreset('Again');
+    expect(timer.getState().selectedPresetId).toBe(temp);
+    expect(read()).toEqual({ value: 5 * MINUTE, status: 'idle' });
+  });
+
+  it('a Share link opened in the same browser does not pick up a stored Preset\'s runs', () => {
+    const { env, timer, id } = setup();
+    timer.start(id);
+    env.advance(MINUTE);
+    const opened = open({ ...env, url: new URL(timer.shareLink()) });
+    expect(opened.timer.getState().selectedPresetId).toBeNull();
+    expect(opened.read()).toEqual({ value: 5 * MINUTE, status: 'idle' });
+    // And the Share link's own runs stay out of the Preset.
+    opened.timer.setMode(id, 'stopwatch');
+    opened.timer.start(id);
+    expect(open(env).read()).toEqual({ value: 4 * MINUTE, status: 'running' });
+  });
+
+  it('a run started for another configuration of the timer counts as idle', () => {
+    const { env, timer, id } = setup();
+    timer.setDuration(id, 5 * MINUTE); // writes the Settings to storage
+    timer.start(id);
+    env.advance(MINUTE);
+    // Another tab changes the duration (Settings) without this tab's run being reset there.
+    const settingsKey = 'mywidgetbox:timer:settings';
+    const doc = JSON.parse(env.storage.getItem(settingsKey)!);
+    doc.presets[0].settings.timers[0].duration = 20 * MINUTE;
+    env.storage.setItem(settingsKey, JSON.stringify(doc));
+    expect(open(env).read()).toEqual({ value: 20 * MINUTE, status: 'idle' });
+  });
+
+  it('imported Presets start with every timer idle', () => {
+    const { env, timer, read, id } = setup();
+    const file = timer.exportSettings();
+    timer.start(id);
+    env.advance(MINUTE);
+    expect(timer.importSettings(file)).toBe(true);
+    expect(read()).toEqual({ value: 5 * MINUTE, status: 'idle' });
+  });
+
+  it('a run State stored before Presets scoped runs still applies to the selected Preset', () => {
+    const env = createTestEnv({ now: 10 * MINUTE });
+    env.storage.setItem('mywidgetbox:timer:state', JSON.stringify({ version: 1, timers: { '1': { startedAt: 9 * MINUTE, elapsed: 0 } } }));
+    expect(open(env).read()).toEqual({ value: 4 * MINUTE, status: 'running' });
   });
 
   it('exports and imports the Presets', () => {
