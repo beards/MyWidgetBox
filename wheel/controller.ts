@@ -1,4 +1,13 @@
 import { type Appearance, appearanceDefaults, isAppearance, isHexColor } from '../shared/appearance';
+import {
+  type AnimationSettings,
+  MAX_ANIMATION_DURATION,
+  MIN_ANIMATION_DURATION,
+  REDUCED_MOTION_DURATION,
+  animationFor,
+  isAnimationDuration,
+  isAnimationSettings,
+} from '../shared/animation';
 import type { Env } from '../shared/env';
 import {
   type PresetSummary,
@@ -10,6 +19,9 @@ import {
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
 import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
+
+// Part of this controller's interface (the view and tests use them from here).
+export { type AnimationSettings, MAX_ANIMATION_DURATION, MIN_ANIMATION_DURATION, REDUCED_MOTION_DURATION, animationFor };
 
 /** One option on the wheel; its sector's angle is proportional to its weight. */
 export interface WheelEntry {
@@ -47,13 +59,6 @@ export interface WheelAppearance extends Appearance {
   labelColor: string;
   /** `#rrggbb` color of the pointer. */
   pointerColor: string;
-}
-
-export interface AnimationSettings {
-  /** Length of a full spin in ms, MIN_ANIMATION_DURATION..MAX_ANIMATION_DURATION. */
-  duration: number;
-  /** Play the full animation even when the system asks for reduced motion. */
-  alwaysFull: boolean;
 }
 
 /** What the wheel remembers and shares; one value per Preset. Add new fields with defaults here. */
@@ -154,10 +159,6 @@ export const MAX_ENTRIES = 100;
 export const MAX_LABEL_LENGTH = 100;
 export const MAX_WEIGHT = 1_000_000;
 export const HISTORY_LIMIT = 20;
-export const MIN_ANIMATION_DURATION = 1000;
-export const MAX_ANIMATION_DURATION = 10_000;
-/** Duration of the quick reveal that replaces the spin under reduced motion. */
-export const REDUCED_MOTION_DURATION = 300;
 /** The pointer lands in this inner fraction of the winning sector, never right on a border. */
 const LANDING_FRACTION = 0.8;
 
@@ -219,15 +220,6 @@ function isEntryList(value: unknown): value is WheelEntry[] {
 function isWheelAppearance(value: unknown): value is WheelAppearance {
   const { labelColor, pointerColor } = (value ?? {}) as Partial<WheelAppearance>;
   return isAppearance(value) && isHexColor(labelColor) && isHexColor(pointerColor);
-}
-
-function isValidDuration(duration: unknown): duration is number {
-  return typeof duration === 'number' && duration >= MIN_ANIMATION_DURATION && duration <= MAX_ANIMATION_DURATION;
-}
-
-function isAnimationSettings(value: unknown): value is AnimationSettings {
-  const { duration, alwaysFull } = (value ?? {}) as Partial<AnimationSettings>;
-  return isValidDuration(duration) && typeof alwaysFull === 'boolean';
 }
 
 /** The sectors of the unrotated wheel, in entry order, each spanning weight / total of 360°. */
@@ -414,7 +406,7 @@ export function createWheelController(
       if (isSoundSettings(sound)) updateSettings({ sound });
     },
     setAnimationDuration(ms) {
-      if (isValidDuration(ms)) setAnimation({ duration: ms });
+      if (isAnimationDuration(ms)) setAnimation({ duration: ms });
     },
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
     createPreset(name) {
@@ -449,11 +441,3 @@ function ids(list: unknown[]): string[] {
   return list.filter((id): id is string => typeof id === 'string');
 }
 
-/** How the view should animate a spin, given whether the system asks for reduced motion. */
-export function animationFor(
-  { animationDuration, alwaysFullAnimation }: WheelState,
-  prefersReducedMotion: boolean,
-): { duration: number; reduced: boolean } {
-  const reduced = prefersReducedMotion && !alwaysFullAnimation;
-  return { duration: reduced ? REDUCED_MOTION_DURATION : animationDuration, reduced };
-}

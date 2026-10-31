@@ -1,5 +1,6 @@
 // Opt-in sound module (ADR-0002). Built-in sounds are synthesized with Web Audio, so no file or network
 // request is needed; a Widget may let the user replace them with a sound URL.
+import { isHttpUrlOrEmpty } from './url';
 
 /** Built-in sounds: dice landing, a wheel tick, a timer alert. */
 export type BuiltInSound = 'diceLand' | 'tick' | 'alert';
@@ -15,19 +16,9 @@ export interface SoundSettings {
 
 export const soundDefaults: SoundSettings = { enabled: true, volume: 0.7, url: '' };
 
-export function isSoundUrl(url: unknown): url is string {
-  if (url === '') return true;
-  if (typeof url !== 'string') return false;
-  try {
-    return ['http:', 'https:'].includes(new URL(url).protocol);
-  } catch {
-    return false;
-  }
-}
-
 export function isSoundSettings(value: unknown): value is SoundSettings {
   const { enabled, volume, url } = (value ?? {}) as Partial<SoundSettings>;
-  return typeof enabled === 'boolean' && typeof volume === 'number' && volume >= 0 && volume <= 1 && isSoundUrl(url);
+  return typeof enabled === 'boolean' && typeof volume === 'number' && volume >= 0 && volume <= 1 && isHttpUrlOrEmpty(url);
 }
 
 /** Where sounds actually come out; the Web Audio one is the default, tests pass a recording one. */

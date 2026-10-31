@@ -4,6 +4,7 @@
  * own items (e.g. dice body / pip colors) and checks them next to `isAppearance`.
  * Pure data and validation; the DOM side is in appearance-dom.ts.
  */
+import { isHttpUrlOrEmpty } from './url';
 
 export const BACKGROUND_KINDS = ['solid', 'transparent', 'image'] as const;
 export type BackgroundKind = (typeof BACKGROUND_KINDS)[number];
@@ -49,17 +50,6 @@ export function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 }
 
-/** '' or an absolute http(s) URL. */
-export function isImageUrl(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  if (value === '') return true;
-  try {
-    return ['http:', 'https:'].includes(new URL(value).protocol);
-  } catch {
-    return false;
-  }
-}
-
 /** Checks the baseline fields; a Widget's `isValid` calls this and checks its own items too. */
 export function isAppearance(value: unknown): value is Appearance {
   const { background, fontFamily, fontSize, textColor, scale } = (value ?? {}) as Partial<Appearance>;
@@ -68,7 +58,7 @@ export function isAppearance(value: unknown): value is Appearance {
     background !== null &&
     BACKGROUND_KINDS.includes(background.kind) &&
     isHexColor(background.color) &&
-    isImageUrl(background.imageUrl) &&
+    isHttpUrlOrEmpty(background.imageUrl) &&
     typeof fontFamily === 'string' &&
     fontFamily.length <= MAX_FONT_FAMILY_LENGTH &&
     inRange(fontSize, FONT_SIZE_RANGE) &&

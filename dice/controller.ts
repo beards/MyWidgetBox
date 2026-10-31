@@ -1,4 +1,13 @@
 import { type Appearance, appearanceDefaults, isAppearance, isHexColor } from '../shared/appearance';
+import {
+  type AnimationSettings,
+  MAX_ANIMATION_DURATION,
+  MIN_ANIMATION_DURATION,
+  REDUCED_MOTION_DURATION,
+  animationFor,
+  isAnimationDuration,
+  isAnimationSettings,
+} from '../shared/animation';
 import type { Env } from '../shared/env';
 import { randomBelow } from '../shared/random';
 import {
@@ -10,6 +19,9 @@ import {
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
 import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
+
+// Part of this controller's interface (the view and tests use them from here).
+export { type AnimationSettings, MAX_ANIMATION_DURATION, MIN_ANIMATION_DURATION, REDUCED_MOTION_DURATION, animationFor };
 
 export const DIE_SIDES = [4, 6, 8, 10, 12, 20, 100] as const;
 export type DieSides = (typeof DIE_SIDES)[number];
@@ -55,13 +67,6 @@ export interface DiceSettings {
   sound: SoundSettings;
   /** Roll by shaking the phone (off by default; needs motion permission on iOS). */
   shakeToRoll: boolean;
-}
-
-export interface AnimationSettings {
-  /** Length of a full roll animation in ms, MIN_ANIMATION_DURATION..MAX_ANIMATION_DURATION. */
-  duration: number;
-  /** Play the full animation even when the system asks for reduced motion. */
-  alwaysFull: boolean;
 }
 
 export interface DiceState {
@@ -127,10 +132,6 @@ export interface DiceController {
 
 export const MAX_DICE_PER_KIND = 99;
 export const HISTORY_LIMIT = 20;
-export const MIN_ANIMATION_DURATION = 1000;
-export const MAX_ANIMATION_DURATION = 10_000;
-/** Duration of the quick reveal that replaces the roll animation under reduced motion. */
-export const REDUCED_MOTION_DURATION = 300;
 
 export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
   namespace: 'dice',
@@ -154,15 +155,6 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
 function isDiceAppearance(value: unknown): value is DiceAppearance {
   const { dieColor, pipColor } = (value ?? {}) as Partial<DiceAppearance>;
   return isAppearance(value) && isHexColor(dieColor) && isHexColor(pipColor);
-}
-
-function isValidDuration(duration: unknown): duration is number {
-  return typeof duration === 'number' && duration >= MIN_ANIMATION_DURATION && duration <= MAX_ANIMATION_DURATION;
-}
-
-function isAnimationSettings(value: unknown): value is AnimationSettings {
-  const { duration, alwaysFull } = (value ?? {}) as Partial<AnimationSettings>;
-  return isValidDuration(duration) && typeof alwaysFull === 'boolean';
 }
 
 function isDiceSet(value: unknown): value is DiceSet {
@@ -290,7 +282,7 @@ export function createDiceController(
       if (!state.animating) update({ outcome: null, history: [] });
     },
     setAnimationDuration(ms) {
-      if (isValidDuration(ms)) setAnimation({ duration: ms });
+      if (isAnimationDuration(ms)) setAnimation({ duration: ms });
     },
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
     setSound(next) {
@@ -313,14 +305,6 @@ export function createDiceController(
   };
 }
 
-/** How the view should animate a roll, given whether the system asks for reduced motion. */
-export function animationFor(
-  { animationDuration, alwaysFullAnimation }: DiceState,
-  prefersReducedMotion: boolean,
-): { duration: number; reduced: boolean } {
-  const reduced = prefersReducedMotion && !alwaysFullAnimation;
-  return { duration: reduced ? REDUCED_MOTION_DURATION : animationDuration, reduced };
-}
 
 /** Total and breakdown, e.g. `17 = 12 + 3 + 2`; just the total when there is nothing to break down. */
 export function formatOutcome({ rolls, modifier, total }: DiceOutcome): string {
