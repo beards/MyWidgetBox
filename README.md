@@ -11,6 +11,8 @@ Vocabulary (Widget, Settings, State, Outcome, ...) is defined in [GLOSSARY.md](G
 
 On touch screens the controls grow to finger size and narrow layouts reflow; desktop and OBS keep the compact layout.
 
+On screens at least 900px wide (`min-width: 56.25em`), a Widget shows its display on the left and the controls in a scrolling column on the right, so every change shows immediately; narrower screens (phones, portrait tablets) stack the controls below the display. Display mode keeps the display alone on the page.
+
 | Feature | Where it degrades | What happens |
 | --- | --- | --- |
 | Screen Wake Lock (timer keeps the screen on while running) | Browsers without the API (older Safari < 16.4, Firefox < 126), low-battery mode, hidden tab | The lock is skipped silently; the screen may turn off, the timer keeps counting. |
@@ -53,6 +55,7 @@ shared/             opt-in modules any Widget may use
   display-mode.ts   Display mode: hides [data-controls] elements
   appearance.ts     appearance Settings baseline (background solid/transparent/image, font, size, scale); Widgets extend it
   appearance-dom.ts applies an appearance to the page and mounts the appearance panel
+  layout.css        side-by-side page layout on wide screens (display left, controls right)
 dice/               one directory per Widget, served at /<name>/
   index.html        page entry
   main.ts           view layer: DOM, animation, sound

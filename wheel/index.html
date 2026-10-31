@@ -4,22 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n="title"></title>
+    <link rel="stylesheet" href="../shared/layout.css" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="wheel__language" id="language" data-controls></div>
-    <main class="wheel">
-      <div class="wheel__display" id="display">
-        <button type="button" class="wheel__stage" id="wheel" data-i18n-aria-label="spin"></button>
-        <button type="button" class="wheel__result" id="result" aria-live="polite" data-i18n-aria-label="dismissResult" hidden></button>
-      </div>
-      <p class="wheel__all-drawn" id="all-drawn" role="status" data-i18n="allDrawn" hidden></p>
-      <div class="wheel__actions" data-controls>
-        <button type="button" class="wheel__spin" id="spin" data-i18n="spin"></button>
-        <button type="button" id="reset" data-i18n="reset"></button>
+    <div class="wheel__language layout__language" id="language" data-controls></div>
+    <main class="wheel layout">
+      <div class="layout__stage">
+        <div class="wheel__display layout__display" id="display">
+          <button type="button" class="wheel__stage" id="wheel" data-i18n-aria-label="spin"></button>
+          <button type="button" class="wheel__result" id="result" aria-live="polite" data-i18n-aria-label="dismissResult" hidden></button>
+        </div>
+        <p class="wheel__all-drawn" id="all-drawn" role="status" data-i18n="allDrawn" hidden></p>
+        <div class="wheel__actions" data-controls>
+          <button type="button" class="wheel__spin" id="spin" data-i18n="spin"></button>
+          <button type="button" id="reset" data-i18n="reset"></button>
+        </div>
       </div>
 
-      <section class="wheel__controls" data-controls>
+      <section class="wheel__controls layout__panel" data-controls>
         <p class="wheel__shared" id="shared-notice" hidden>
           <span data-i18n="sharedNotice"></span>
           <button type="button" id="shared-save" data-i18n="saveAsPreset"></button>

@@ -1,0 +1,91 @@
+/*
+ * Shared page layout for Widgets (opt-in, ADR-0002). Markup:
+ *   #language.layout__language          the language switcher (outside <main>)
+ *   main.layout
+ *     div.layout__stage                 everything shown left: the display and its action buttons
+ *       .layout__display                the Widget's display (grows to fill the stage)
+ *     .layout__panel                    the controls column
+ *
+ * Narrow screens (phones, portrait tablets) keep each Widget's own stacked layout: the stage
+ * wrapper is `display: contents`, so its children lay out as if it were not there.
+ *
+ * Wide screens (at least 56.25em = 900px, where a ~340px controls column still leaves the display
+ * room; portrait tablets up to 834px stay stacked): the display sits on the left and stays in view
+ * while the controls column on the right scrolls on its own, so every change shows immediately.
+ * Display mode (html[data-display], shared/display-mode.ts) keeps the Widget's own layout.
+ */
+.layout__stage {
+  display: contents;
+}
+
+@media (min-width: 56.25em) {
+  html:not([data-display]) {
+    --layout-panel-width: clamp(340px, 30vw, 420px);
+    --layout-bar-height: 3.5rem;
+  }
+
+  html:not([data-display]) body {
+    display: block;
+    place-items: normal;
+    min-height: 0;
+  }
+
+  html:not([data-display]) .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--layout-panel-width);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0;
+    height: 100vh;
+    height: 100dvh;
+    padding: 0;
+  }
+
+  html:not([data-display]) .layout__stage {
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 1.5rem;
+    overflow: auto;
+  }
+
+  html:not([data-display]) .layout__display {
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-height: 0;
+    justify-content: center;
+  }
+
+  html:not([data-display]) .layout__panel {
+    grid-column: 2;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: none;
+    margin-top: var(--layout-bar-height);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 0;
+  }
+
+  /* The language switcher heads the controls column, in a bar of the panel's color. */
+  html:not([data-display]) .layout__language {
+    position: fixed;
+    top: 0;
+    right: 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: var(--layout-panel-width);
+    height: var(--layout-bar-height);
+    margin: 0;
+    padding: 0 1rem;
+    background: rgb(255 255 255 / 0.9);
+  }
+}

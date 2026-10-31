@@ -302,3 +302,17 @@ body {
     min-height: 2rem;
   }
 }
+
+/* Wide screens (shared/layout.css): the stage fills the display area and the SVG draws the
+   largest wheel that fits it (viewBox, preserveAspectRatio meet). */
+@media (min-width: 56.25em) {
+  html:not([data-display]) .wheel__display {
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  }
+
+  html:not([data-display]) .wheel__stage {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+  }
+}

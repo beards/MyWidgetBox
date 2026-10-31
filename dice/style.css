@@ -225,3 +225,13 @@ body {
     min-height: 2rem;
   }
 }
+
+/* Wide screens (shared/layout.css): the table fills the display area beside the controls. */
+@media (min-width: 56.25em) {
+  html:not([data-display]) .dice__stage {
+    flex: 1 1 0;
+    width: 100%;
+    height: auto;
+    min-height: 12rem;
+  }
+}

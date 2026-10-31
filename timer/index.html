@@ -4,15 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n="title"></title>
+    <link rel="stylesheet" href="../shared/layout.css" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="timer__language" id="language" data-controls></div>
-    <main class="timer">
-      <div class="timer__list" id="timers"></div>
-      <button type="button" class="timer__add" id="timer-add" data-controls data-i18n="addTimer"></button>
+    <div class="timer__language layout__language" id="language" data-controls></div>
+    <main class="timer layout">
+      <div class="layout__stage">
+        <div class="timer__list" id="timers"></div>
+        <button type="button" class="timer__add" id="timer-add" data-controls data-i18n="addTimer"></button>
+      </div>
 
-      <section class="timer__controls" data-controls>
+      <section class="timer__controls layout__panel" data-controls>
         <p class="timer__shared" id="shared-notice" hidden>
           <span data-i18n="sharedNotice"></span>
           <button type="button" id="shared-save" data-i18n="saveAsPreset"></button>
