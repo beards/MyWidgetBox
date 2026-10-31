@@ -3,13 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dice · MyWidgetBox</title>
+    <title data-i18n="title"></title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
+    <div class="dice__language" id="language"></div>
     <main class="dice">
-      <button type="button" class="dice__die" id="die" aria-live="polite" aria-label="Roll">?</button>
-      <button type="button" class="dice__roll" id="roll">Roll</button>
+      <button type="button" class="dice__die" id="die" aria-live="polite" data-i18n-aria-label="roll">?</button>
+      <button type="button" class="dice__roll" id="roll" data-i18n="roll"></button>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>
