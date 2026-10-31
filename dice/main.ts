@@ -1,4 +1,5 @@
 // View layer: owns the DOM, subscribes to the controller, and calls its actions.
+import { applyAppearance, mountAppearancePanel } from '../shared/appearance-dom';
 import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
@@ -8,6 +9,7 @@ import { createSoundPlayer } from '../shared/sound';
 import {
   DIE_SIDES,
   MAX_DICE_PER_KIND,
+  type DiceAppearance,
   type DiceOutcome,
   type DiceSet,
   type DiceState,
@@ -18,9 +20,11 @@ import {
 } from './controller';
 import { messages } from './messages';
 import { createDiceScene } from './scene';
+import { listenForShakes } from './shake';
 
 const env = createBrowserEnv();
-applyDisplayMode(readDisplayOptions(env.url));
+const displayOptions = readDisplayOptions(env.url);
+applyDisplayMode(displayOptions);
 const dice = createDiceController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
@@ -58,12 +62,26 @@ const alwaysFullInput = $<HTMLInputElement>('#always-full');
 const soundEnabledInput = $<HTMLInputElement>('#sound-enabled');
 const soundVolumeInput = $<HTMLInputElement>('#sound-volume');
 const soundUrlInput = $<HTMLInputElement>('#sound-url');
+const shakeInput = $<HTMLInputElement>('#shake-to-roll');
+const shakeStatus = $('#shake-status');
 
 const scene = createDiceScene(die);
 const sound = createSoundPlayer();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each roll starts its animation exactly once. */
 let playing: DiceOutcome | null = null;
+const display = $('#display');
+const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelector<HTMLElement>('#appearance')!, {
+  i18n,
+  fields: [
+    { key: 'dieColor', label: () => t('dieColor') },
+    { key: 'pipColor', label: () => t('pipColor') },
+  ],
+  onChange(appearance) {
+    dice.setAppearance(appearance);
+    appearancePanel.update(dice.getState().appearance);
+  },
+});
 
 function renderAddSides() {
   const selected = addSides.value || '20';
@@ -73,7 +91,11 @@ function renderAddSides() {
 }
 
 function render(state: DiceState) {
-  const { diceSet, presets, selectedPresetId, outcome, history, animating } = state;
+  const { diceSet, appearance, presets, selectedPresetId, outcome, history, animating } = state;
+  applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
+  scene.setColors({ body: appearance.dieColor, label: appearance.pipColor });
+  appearancePanel.update(appearance);
+
   presetSelect.replaceChildren(
     ...(selectedPresetId === null ? [new Option(t('sharedPreset'), '', false, true)] : []),
     ...presets.map(({ id, name }) => new Option(name || t('unnamedPreset'), id, false, id === selectedPresetId)),
@@ -103,6 +125,7 @@ function render(state: DiceState) {
   soundVolumeInput.value = String(Math.round(state.sound.volume * 100));
   soundVolumeInput.disabled = !state.sound.enabled;
   if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
+  shakeInput.checked = state.shakeToRoll;
 
   groupList.replaceChildren(
     ...diceSet.groups.map(({ sides, count }) => {
@@ -220,6 +243,39 @@ soundUrlInput.addEventListener('change', () => {
   edit(() => dice.setSound({ url: soundUrlInput.value.trim() }));
   soundUrlInput.value = dice.getState().sound.url;
 });
+
+// Shake to roll: roll() already ignores shakes while animating.
+let stopShakes: (() => void) | null = null;
+async function startShakes() {
+  if (stopShakes) return;
+  // Gate on the setting too, so switching to a Preset with it off stops shake rolls.
+  const result = await listenForShakes(() => dice.getState().shakeToRoll && dice.roll());
+  if (typeof result === 'function') {
+    stopShakes = result;
+    shakeStatus.textContent = '';
+  } else {
+    shakeStatus.textContent = t(result === 'denied' ? 'shakeDenied' : 'shakeUnsupported');
+  }
+}
+shakeInput.addEventListener('change', () => {
+  dice.setShakeToRoll(shakeInput.checked);
+  if (shakeInput.checked) {
+    void startShakes();
+  } else {
+    stopShakes?.();
+    stopShakes = null;
+    shakeStatus.textContent = '';
+  }
+});
+if (dice.getState().shakeToRoll) {
+  // iOS only grants motion access from a user gesture, so wait for the first tap there.
+  const needsGesture = typeof DeviceMotionEvent !== 'undefined' && 'requestPermission' in DeviceMotionEvent;
+  if (needsGesture) {
+    document.addEventListener('click', () => dice.getState().shakeToRoll && void startShakes(), { once: true });
+  } else {
+    void startShakes();
+  }
+}
 settingsExport.addEventListener('click', () => {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));

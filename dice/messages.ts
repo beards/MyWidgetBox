@@ -1,3 +1,4 @@
+import { type AppearanceMessageKey, appearanceMessages } from '../shared/appearance-messages';
 import type { MessageTables } from '../shared/i18n';
 
 export type DiceMessageKey =
@@ -11,6 +12,9 @@ export type DiceMessageKey =
   | 'soundEnabled'
   | 'soundVolume'
   | 'soundUrl'
+  | 'shakeToRoll'
+  | 'shakeUnsupported'
+  | 'shakeDenied'
   | 'diceSet'
   | 'addDie'
   | 'removeDie'
@@ -36,10 +40,13 @@ export type DiceMessageKey =
   | 'copyFailed'
   | 'exportSettings'
   | 'importSettings'
-  | 'importError';
+  | 'importError'
+  | 'dieColor'
+  | 'pipColor';
 
-export const messages: MessageTables<DiceMessageKey> = {
+export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
   en: {
+    ...appearanceMessages.en,
     title: 'Dice · MyWidgetBox',
     roll: 'Roll',
     reset: 'Reset',
@@ -50,6 +57,9 @@ export const messages: MessageTables<DiceMessageKey> = {
     soundEnabled: 'Play a sound when the dice land',
     soundVolume: 'Volume',
     soundUrl: 'Custom sound URL (empty = built-in)',
+    shakeToRoll: 'Shake the phone to roll',
+    shakeUnsupported: 'This device cannot detect shaking.',
+    shakeDenied: 'Motion access was denied, so shaking cannot roll. Allow it in the browser settings and try again.',
     diceSet: 'Dice set',
     addDie: 'Add',
     removeDie: 'Remove {label}',
@@ -76,8 +86,11 @@ export const messages: MessageTables<DiceMessageKey> = {
     exportSettings: 'Export',
     importSettings: 'Import',
     importError: 'This file could not be imported. Your Settings were not changed.',
+    dieColor: 'Die color',
+    pipColor: 'Pip color',
   },
   'zh-Hant': {
+    ...appearanceMessages['zh-Hant'],
     title: '骰子 · MyWidgetBox',
     roll: '擲骰',
     reset: '重置',
@@ -88,6 +101,9 @@ export const messages: MessageTables<DiceMessageKey> = {
     soundEnabled: '骰子落地時播放音效',
     soundVolume: '音量',
     soundUrl: '自訂音效網址（留空＝內建音效）',
+    shakeToRoll: '搖手機擲骰',
+    shakeUnsupported: '此裝置無法偵測搖動。',
+    shakeDenied: '動作感應存取被拒，無法搖動擲骰。請在瀏覽器設定中允許後再試一次。',
     diceSet: '骰組',
     addDie: '加入',
     removeDie: '移除 {label}',
@@ -114,5 +130,7 @@ export const messages: MessageTables<DiceMessageKey> = {
     exportSettings: '匯出',
     importSettings: '匯入',
     importError: '無法匯入此檔案，現有 Settings 未變更。',
+    dieColor: '骰子顏色',
+    pipColor: '點數顏色',
   },
 };

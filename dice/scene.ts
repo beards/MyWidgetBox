@@ -27,10 +27,17 @@ export interface DiceScene {
   show(rolls: DieRoll[]): void;
   /** Animates these dice onto their faces and calls onDone when they have settled. */
   play(rolls: DieRoll[], options: { duration: number; reduced: boolean }, onDone: () => void): void;
+  /** Recolors the dice (also mid-animation); a no-op if the colors are unchanged. */
+  setColors(colors: DiceColors): void;
 }
 
-const FACE_COLOR = '#f7f3e8';
-const LABEL_COLOR = '#1f1f1f';
+/** CSS colors of the die body and of the pips / face numbers. */
+export interface DiceColors {
+  body: string;
+  label: string;
+}
+
+const DEFAULT_COLORS: DiceColors = { body: '#f7f3e8', label: '#1f1f1f' };
 const EDGE_COLOR = '#8a8170';
 /** Grid cell size in world units; dice have a circumradius of about 1. */
 const CELL = 2.6;
@@ -39,6 +46,7 @@ const FIELD_OF_VIEW = 30;
 const RESTING_TILT = new Quaternion().setFromEuler(new Euler(-0.2, 0.15, 0));
 
 interface Model {
+  sides: number;
   shape: DieShape;
   geometry: BufferGeometry;
   edges: EdgesGeometry;
@@ -75,6 +83,11 @@ export function createDiceScene(container: HTMLElement): DiceScene {
   let shownKey = '';
   let grid = { cols: 1, rows: 1 };
   let frame = 0;
+  let colors = DEFAULT_COLORS;
+
+  function faceMaterials(shape: DieShape, sides: number): Material[] {
+    return shape.faces.map((face) => new MeshStandardMaterial({ map: faceTexture(face, sides, colors), roughness: 0.55 }));
+  }
 
   function model(body: DieBody): Model {
     const key = `${body.sides}:${body.labels.join(',')}`;
@@ -83,10 +96,11 @@ export function createDiceScene(container: HTMLElement): DiceScene {
       const shape = dieShape(body.sides, body.labels);
       const geometry = createDieGeometry(shape);
       found = {
+        sides: body.sides,
         shape,
         geometry,
         edges: new EdgesGeometry(geometry, 1),
-        materials: shape.faces.map((face) => new MeshStandardMaterial({ map: faceTexture(face, body.sides), roughness: 0.55 })),
+        materials: faceMaterials(shape, body.sides),
       };
       models.set(key, found);
     }
@@ -175,6 +189,21 @@ export function createDiceScene(container: HTMLElement): DiceScene {
       };
       frame = requestAnimationFrame(step);
     },
+
+    setColors(next) {
+      if (next.body === colors.body && next.label === colors.label) return;
+      colors = next;
+      // Textures are painted with the colors: repaint every cached model. Meshes share the
+      // model's materials array, so replacing its contents recolors them in place.
+      for (const found of models.values()) {
+        for (const material of found.materials) {
+          (material as MeshStandardMaterial).map?.dispose();
+          material.dispose();
+        }
+        found.materials.splice(0, found.materials.length, ...faceMaterials(found.shape, found.sides));
+      }
+      render();
+    },
   };
 }
 
@@ -203,15 +232,15 @@ function easeOutCubic(t: number) {
  * The label texture of one face. createDieGeometry maps the face's circumscribed circle onto
  * the texture square, so the label is sized to fit the face's inscribed circle.
  */
-function faceTexture(face: DieFace, sides: number): CanvasTexture {
+function faceTexture(face: DieFace, sides: number, colors: DiceColors): CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 256;
   const context = canvas.getContext('2d')!;
-  context.fillStyle = FACE_COLOR;
+  context.fillStyle = colors.body;
   context.fillRect(0, 0, 256, 256);
   const inscribed = 128 * (face.inradius / face.radius);
   const fontSize = inscribed * (face.label.length > 1 ? 1.05 : 1.35);
-  context.fillStyle = LABEL_COLOR;
+  context.fillStyle = colors.label;
   context.font = `bold ${fontSize}px system-ui, sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
