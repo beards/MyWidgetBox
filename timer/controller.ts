@@ -335,6 +335,22 @@ export function readAlert(timer: TimerView, now: number, alert: TimerAlertSettin
   return { effect: alert.effectSeconds === 0 || now < upAt + alert.effectSeconds * 1000 };
 }
 
+/** How long before its target a `targetTime` timer keeps the screen on. */
+export const TARGET_WAKE_LOCK_SPAN = 60 * 60 * 1000;
+
+/**
+ * Whether the screen should stay on for these timers (the view passes the visible ones):
+ * while a countdown or stopwatch is running, or a `targetTime` timer is in its last
+ * TARGET_WAKE_LOCK_SPAN before the target. A `targetTime` timer is always "running", so
+ * holding the lock for it all day would drain batteries for nothing.
+ */
+export function wantsWakeLock(timers: TimerView[], now: number): boolean {
+  return timers.some((timer) => {
+    const { value, status } = readTimer(timer, now);
+    return status === 'running' && (timer.mode !== 'targetTime' || value <= TARGET_WAKE_LOCK_SPAN);
+  });
+}
+
 /**
  * The value of a timer at time `now`: `mm:ss` below an hour, `hh:mm:ss` from an hour on.
  * A countdown rounds up (it shows 00:00 only once time is up), a stopwatch rounds down.

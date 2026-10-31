@@ -19,6 +19,7 @@ import {
   readAlert,
   readTimer,
   visibleTimers,
+  wantsWakeLock,
 } from './controller';
 import { messages } from './messages';
 
@@ -99,19 +100,13 @@ function createCard(id: string): TimerCard {
   const actions = document.createElement('div');
   actions.className = 'timer__actions';
   actions.dataset.controls = '';
-  const toggle = button(() => {
-    const view = timer.getState().timers.find((entry) => entry.id === id);
-    if (!view) return;
-    if (readTimer(view, env.now()).status === 'running') timer.pause(id);
-    else timer.start(id);
-  });
+  const toggle = button(() => toggleTimer(id));
   toggle.classList.add('timer__toggle');
   const reset = button(() => timer.reset(id));
-  const stop = button(() => {
-    alertSounds.get(id)?.();
-    alertSounds.delete(id);
-    timer.stopAlert(id);
-  });
+  const stop = button(() => stopAlert(id));
+  // The display itself is a control too (Display mode hides the buttons): a click stops a
+  // sounding or flashing alert, otherwise it starts or pauses the timer.
+  value.addEventListener('click', () => (isAlerting(id) ? stopAlert(id) : toggleTimer(id)));
   actions.append(toggle, reset, stop);
 
   const settings = document.createElement('div');
@@ -159,21 +154,20 @@ function createCard(id: string): TimerCard {
 
   root.append(heading, value, status, actions, settings);
 
-  let shownValue = '';
   const card: TimerCard = {
     root,
+    // Runs every frame: each write is skipped when the DOM already shows that value.
     tick(view, now) {
       const reading = readTimer(view, now);
-      const text = formatTimer(view, now, { showFraction: timer.getState().showFraction });
-      if (text !== shownValue) value.textContent = shownValue = text;
-      root.dataset.status = reading.status;
-      status.textContent = reading.status === 'timeUp' ? t('timeUp') : '';
-      toggle.textContent = t(reading.status === 'running' ? 'pause' : reading.status === 'paused' ? 'resume' : 'start');
-      toggle.disabled = reading.status === 'timeUp';
+      setText(value, formatTimer(view, now, { showFraction: timer.getState().showFraction }));
+      if (root.dataset.status !== reading.status) root.dataset.status = reading.status;
+      setText(status, reading.status === 'timeUp' ? t('timeUp') : '');
+      setText(toggle, t(reading.status === 'running' ? 'pause' : reading.status === 'paused' ? 'resume' : 'start'));
+      if (toggle.disabled !== (reading.status === 'timeUp')) toggle.disabled = reading.status === 'timeUp';
       const { effect } = readAlert(view, now, timer.getState().alert);
-      if (effect) root.dataset.alert = '';
-      else delete root.dataset.alert;
-      stop.hidden = !effect && !alertSounds.has(id);
+      if (effect !== ('alert' in root.dataset)) root.toggleAttribute('data-alert', effect);
+      const hideStop = !effect && !alertSounds.has(id);
+      if (stop.hidden !== hideStop) stop.hidden = hideStop;
     },
     update(view, now) {
       const { timers } = timer.getState();
@@ -205,6 +199,42 @@ function createCard(id: string): TimerCard {
     },
   };
   return card;
+}
+
+function setText(element: HTMLElement, text: string) {
+  if (element.textContent !== text) element.textContent = text;
+}
+
+/** The timers on the page: with `?timer=<id>` in Display mode only that one. */
+const shownTimers = () => visibleTimers(timer.getState().timers, env.url);
+
+function toggleTimer(id: string) {
+  const view = timer.getState().timers.find((entry) => entry.id === id);
+  if (!view) return;
+  if (readTimer(view, env.now()).status === 'running') timer.pause(id);
+  else timer.start(id);
+}
+
+/** Space: pauses the shown timers if any is running, otherwise starts them all. */
+function toggleShownTimers() {
+  const now = env.now();
+  const views = shownTimers().filter((view) => view.mode !== 'targetTime');
+  const anyRunning = views.some((view) => readTimer(view, now).status === 'running');
+  for (const { id } of views) {
+    if (anyRunning) timer.pause(id);
+    else timer.start(id);
+  }
+}
+
+function isAlerting(id: string) {
+  const view = timer.getState().timers.find((entry) => entry.id === id);
+  return alertSounds.has(id) || (!!view && readAlert(view, env.now(), timer.getState().alert).effect);
+}
+
+function stopAlert(id: string) {
+  alertSounds.get(id)?.();
+  alertSounds.delete(id);
+  timer.stopAlert(id);
 }
 
 function button(onClick: () => void) {
@@ -270,9 +300,8 @@ function render(state: TimerState) {
 }
 
 // The shown value is computed from the clock on every frame, so throttled or hidden tabs
-// never drift; only the text that changed is touched.
+// never drift; only the text that changed is touched. Alerts are checked on an interval.
 function frame() {
-  checkAlerts();
   const now = env.now();
   for (const view of timer.getState().timers) cards.get(view.id)?.tick(view, now);
   requestAnimationFrame(frame);
@@ -288,7 +317,9 @@ function checkAlerts() {
     const stop = sound.repeat('alert', timer.getState().sound, { interval: 1000, duration: soundMs });
     alertSounds.set(id, stop);
     setTimeout(() => {
-      if (alertSounds.get(id) === stop) alertSounds.delete(id);
+      if (alertSounds.get(id) !== stop) return;
+      stop();
+      alertSounds.delete(id);
     }, soundMs);
   }
   const { timers } = timer.getState();
@@ -299,7 +330,8 @@ function checkAlerts() {
       alertSounds.delete(id);
     }
   }
-  wakeLock.set(timers.some((view) => readTimer(view, env.now()).status === 'running'));
+  // Hidden timers (`?timer=` shows one) do not keep the screen on.
+  wakeLock.set(wantsWakeLock(shown, env.now()));
 }
 
 function shareLink() {
@@ -315,8 +347,23 @@ timer.subscribe(render);
 i18n.subscribe(() => render(timer.getState()));
 render(timer.getState());
 requestAnimationFrame(frame);
-// rAF does not run in hidden tabs; this keeps time-up alerts sounding there (throttled to ~1 s).
+// Also runs in hidden tabs, where rAF stops (throttled to ~1 s there).
 setInterval(checkAlerts, 250);
+
+// Space starts/pauses, R resets and Escape stops the alert of the shown timers, from anywhere
+// (also in Display mode), except while typing or on a focused control.
+document.addEventListener('keydown', (event) => {
+  if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target instanceof Element && event.target.closest('input, select, textarea, button')) return;
+  if (event.code === 'Space') {
+    event.preventDefault();
+    toggleShownTimers();
+  } else if (event.key === 'r' || event.key === 'R') {
+    for (const { id } of shownTimers()) timer.reset(id);
+  } else if (event.key === 'Escape') {
+    for (const { id } of shownTimers()) stopAlert(id);
+  }
+});
 
 presetSelect.addEventListener('change', () => timer.selectPreset(presetSelect.value));
 presetName.addEventListener('change', () => {

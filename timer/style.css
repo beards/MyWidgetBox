@@ -60,6 +60,9 @@ body {
   line-height: 1;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  /* Clicking the value starts/pauses the timer or stops its alert. */
+  cursor: pointer;
+  user-select: none;
 }
 
 .timer__status {

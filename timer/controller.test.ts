@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../shared/env';
 import { createTestEnv } from '../shared/test-env';
-import { MAX_DURATION, TIMER_STATE_KEY, createTimerController, formatTimer, readAlert, readTimer, visibleTimers } from './controller';
+import {
+  MAX_DURATION,
+  TIMER_STATE_KEY,
+  createTimerController,
+  formatTimer,
+  readAlert,
+  readTimer,
+  visibleTimers,
+  wantsWakeLock,
+} from './controller';
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -745,6 +754,45 @@ describe('time-up alert for a countdown to a time of day', () => {
     env.advance(24 * HOUR);
     expect(timer.takeDueAlerts()).toHaveLength(1);
     expect(effect()).toBe(true);
+  });
+});
+
+describe('screen Wake Lock', () => {
+  it('is wanted only while a countdown or stopwatch is running', () => {
+    const { env, timer, id } = setup();
+    const lock = () => wantsWakeLock(timer.getState().timers, env.now());
+    expect(lock()).toBe(false);
+    timer.start(id);
+    expect(lock()).toBe(true);
+    timer.pause(id);
+    expect(lock()).toBe(false);
+    timer.setMode(id, 'stopwatch');
+    timer.start(id);
+    expect(lock()).toBe(true);
+    timer.setMode(id, 'countdown');
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(10 * SECOND);
+    expect(lock()).toBe(false);
+  });
+
+  it('is wanted for a countdown to a time of day only in its last hour', () => {
+    const { env, timer, id } = setup({ now: at(10, 19, 59) });
+    timer.setMode(id, 'targetTime');
+    timer.setTarget(id, '21:00');
+    const lock = () => wantsWakeLock(timer.getState().timers, env.now());
+    expect(lock()).toBe(false);
+    env.advance(MINUTE);
+    expect(lock()).toBe(true);
+    env.advance(HOUR);
+    expect(lock()).toBe(false);
+  });
+
+  it('counts only the timers it is given (the view passes the visible ones)', () => {
+    const { env, timer, id } = setup();
+    const second = timer.addTimer();
+    timer.start(second);
+    expect(wantsWakeLock([view(timer, id)], env.now())).toBe(false);
   });
 });
 
