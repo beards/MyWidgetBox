@@ -3,7 +3,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 
 // One directory per Widget, each with its own index.html entry.
 // Adding a Widget = adding its directory name here (see README).
-const widgets = ['dice'];
+const widgets = ['dice', 'timer'];
 
 export default defineConfig({
   // GitHub Pages serves the site from https://beards.github.io/MyWidgetBox/;
