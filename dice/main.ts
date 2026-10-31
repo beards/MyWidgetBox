@@ -17,6 +17,7 @@ import {
 } from './controller';
 import { messages } from './messages';
 import { createDiceScene } from './scene';
+import { listenForShakes } from './shake';
 
 const env = createBrowserEnv();
 applyDisplayMode(readDisplayOptions(env.url));
@@ -54,6 +55,8 @@ const resetButton = $<HTMLButtonElement>('#reset');
 const durationInput = $<HTMLInputElement>('#duration');
 const durationValue = $<HTMLOutputElement>('#duration-value');
 const alwaysFullInput = $<HTMLInputElement>('#always-full');
+const shakeInput = $<HTMLInputElement>('#shake-to-roll');
+const shakeStatus = $('#shake-status');
 
 const scene = createDiceScene(die);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -91,6 +94,7 @@ function render(state: DiceState) {
   durationInput.value = String(state.animationDuration / 1000);
   durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
   alwaysFullInput.checked = state.alwaysFullAnimation;
+  shakeInput.checked = state.shakeToRoll;
 
   groupList.replaceChildren(
     ...diceSet.groups.map(({ sides, count }) => {
@@ -200,6 +204,39 @@ shareUrl.addEventListener('focus', () => shareUrl.select());
 resetButton.addEventListener('click', () => dice.reset());
 durationInput.addEventListener('input', () => dice.setAnimationDuration(Number(durationInput.value) * 1000));
 alwaysFullInput.addEventListener('change', () => dice.setAlwaysFullAnimation(alwaysFullInput.checked));
+
+// Shake to roll: roll() already ignores shakes while animating.
+let stopShakes: (() => void) | null = null;
+async function startShakes() {
+  if (stopShakes) return;
+  // Gate on the setting too, so switching to a Preset with it off stops shake rolls.
+  const result = await listenForShakes(() => dice.getState().shakeToRoll && dice.roll());
+  if (typeof result === 'function') {
+    stopShakes = result;
+    shakeStatus.textContent = '';
+  } else {
+    shakeStatus.textContent = t(result === 'denied' ? 'shakeDenied' : 'shakeUnsupported');
+  }
+}
+shakeInput.addEventListener('change', () => {
+  dice.setShakeToRoll(shakeInput.checked);
+  if (shakeInput.checked) {
+    void startShakes();
+  } else {
+    stopShakes?.();
+    stopShakes = null;
+    shakeStatus.textContent = '';
+  }
+});
+if (dice.getState().shakeToRoll) {
+  // iOS only grants motion access from a user gesture, so wait for the first tap there.
+  const needsGesture = typeof DeviceMotionEvent !== 'undefined' && 'requestPermission' in DeviceMotionEvent;
+  if (needsGesture) {
+    document.addEventListener('click', () => dice.getState().shakeToRoll && void startShakes(), { once: true });
+  } else {
+    void startShakes();
+  }
+}
 settingsExport.addEventListener('click', () => {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));

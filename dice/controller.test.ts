@@ -248,6 +248,15 @@ describe('dice controller', () => {
     expect(animationFor(dice.getState(), true)).toEqual({ duration: 3000, reduced: false });
   });
 
+  it('has shake-to-roll off by default and remembers it after a reload', () => {
+    const env = createTestEnv();
+    const before = createDiceController(env);
+    expect(before.getState().shakeToRoll).toBe(false);
+
+    before.setShakeToRoll(true);
+    expect(createDiceController(env).getState().shakeToRoll).toBe(true);
+  });
+
   // Chi-square critical values at p = 0.001 for (sides - 1) degrees of freedom.
   const CRITICAL_VALUES: Record<DieSides, number> = {
     4: 16.266,

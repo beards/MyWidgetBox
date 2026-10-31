@@ -40,6 +40,8 @@ export interface DiceOutcome {
 export interface DiceSettings {
   diceSet: DiceSet;
   animation: AnimationSettings;
+  /** Roll by shaking the phone (off by default; needs motion permission on iOS). */
+  shakeToRoll: boolean;
 }
 
 export interface AnimationSettings {
@@ -63,6 +65,7 @@ export interface DiceState {
   /** The animation Settings in effect (see AnimationSettings). */
   animationDuration: number;
   alwaysFullAnimation: boolean;
+  shakeToRoll: boolean;
 }
 
 export interface DiceController {
@@ -86,6 +89,7 @@ export interface DiceController {
   /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
   setAnimationDuration(ms: number): void;
   setAlwaysFullAnimation(always: boolean): void;
+  setShakeToRoll(enabled: boolean): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
   selectPreset(id: string): void;
@@ -114,9 +118,11 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
   defaults: {
     diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
     animation: { duration: 3000, alwaysFull: false },
+    shakeToRoll: false,
   },
   isValid: (settings): settings is DiceSettings =>
-    isDiceSet((settings as DiceSettings).diceSet) && isAnimationSettings((settings as DiceSettings).animation),
+    isDiceSet((settings as DiceSettings).diceSet) && isAnimationSettings((settings as DiceSettings).animation) &&
+    typeof (settings as DiceSettings).shakeToRoll === 'boolean',
 };
 
 function isValidDuration(duration: unknown): duration is number {
@@ -168,6 +174,7 @@ export function createDiceController(
       diceSet: current.diceSet,
       animationDuration: current.animation.duration,
       alwaysFullAnimation: current.animation.alwaysFull,
+      shakeToRoll: current.shakeToRoll,
       presets,
       selectedPresetId,
     };
@@ -249,6 +256,7 @@ export function createDiceController(
       if (isValidDuration(ms)) setAnimation({ duration: ms });
     },
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
+    setShakeToRoll: (shakeToRoll) => updateSettings({ shakeToRoll }),
     createPreset: (name) => changeSettings(() => settings.createPreset(name)),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),

@@ -7,6 +7,9 @@ export type DiceMessageKey =
   | 'animationDuration'
   | 'seconds'
   | 'alwaysFullAnimation'
+  | 'shakeToRoll'
+  | 'shakeUnsupported'
+  | 'shakeDenied'
   | 'diceSet'
   | 'addDie'
   | 'removeDie'
@@ -42,6 +45,9 @@ export const messages: MessageTables<DiceMessageKey> = {
     animationDuration: 'Animation length',
     seconds: '{seconds} s',
     alwaysFullAnimation: 'Always play the full animation (ignore reduced motion)',
+    shakeToRoll: 'Shake the phone to roll',
+    shakeUnsupported: 'This device cannot detect shaking.',
+    shakeDenied: 'Motion access was denied, so shaking cannot roll. Allow it in the browser settings and try again.',
     diceSet: 'Dice set',
     addDie: 'Add',
     removeDie: 'Remove {label}',
@@ -76,6 +82,9 @@ export const messages: MessageTables<DiceMessageKey> = {
     animationDuration: '動畫長度',
     seconds: '{seconds} 秒',
     alwaysFullAnimation: '永遠播放完整動畫（忽略「減少動態效果」）',
+    shakeToRoll: '搖手機擲骰',
+    shakeUnsupported: '此裝置無法偵測搖動。',
+    shakeDenied: '動作感應存取被拒，無法搖動擲骰。請在瀏覽器設定中允許後再試一次。',
     diceSet: '骰組',
     addDie: '加入',
     removeDie: '移除 {label}',
