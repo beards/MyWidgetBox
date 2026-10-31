@@ -5,6 +5,7 @@ import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { applyDisplayMode } from '../shared/display-mode';
 import { readDisplayOptions } from '../shared/share-link';
+import { createSoundPlayer } from '../shared/sound';
 import {
   DIE_SIDES,
   MAX_DICE_PER_KIND,
@@ -58,10 +59,14 @@ const resetButton = $<HTMLButtonElement>('#reset');
 const durationInput = $<HTMLInputElement>('#duration');
 const durationValue = $<HTMLOutputElement>('#duration-value');
 const alwaysFullInput = $<HTMLInputElement>('#always-full');
+const soundEnabledInput = $<HTMLInputElement>('#sound-enabled');
+const soundVolumeInput = $<HTMLInputElement>('#sound-volume');
+const soundUrlInput = $<HTMLInputElement>('#sound-url');
 const shakeInput = $<HTMLInputElement>('#shake-to-roll');
 const shakeStatus = $('#shake-status');
 
 const scene = createDiceScene(die);
+const sound = createSoundPlayer();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each roll starts its animation exactly once. */
 let playing: DiceOutcome | null = null;
@@ -103,7 +108,10 @@ function render(state: DiceState) {
 
   if (animating && outcome && outcome !== playing) {
     playing = outcome;
-    scene.play(outcome.rolls, animationFor(state, reducedMotion.matches), () => dice.finishAnimation());
+    scene.play(outcome.rolls, animationFor(state, reducedMotion.matches), () => {
+      sound.play('diceLand', dice.getState().sound);
+      dice.finishAnimation();
+    });
   } else if (!animating) {
     scene.show(outcome ? outcome.rolls : restingDice(diceSet));
   }
@@ -113,6 +121,10 @@ function render(state: DiceState) {
   durationInput.value = String(state.animationDuration / 1000);
   durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
   alwaysFullInput.checked = state.alwaysFullAnimation;
+  soundEnabledInput.checked = state.sound.enabled;
+  soundVolumeInput.value = String(Math.round(state.sound.volume * 100));
+  soundVolumeInput.disabled = !state.sound.enabled;
+  if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
   shakeInput.checked = state.shakeToRoll;
 
   groupList.replaceChildren(
@@ -223,6 +235,14 @@ shareUrl.addEventListener('focus', () => shareUrl.select());
 resetButton.addEventListener('click', () => dice.reset());
 durationInput.addEventListener('input', () => dice.setAnimationDuration(Number(durationInput.value) * 1000));
 alwaysFullInput.addEventListener('change', () => dice.setAlwaysFullAnimation(alwaysFullInput.checked));
+soundEnabledInput.addEventListener('change', () => dice.setSound({ enabled: soundEnabledInput.checked }));
+soundVolumeInput.addEventListener('input', () => dice.setSound({ volume: Number(soundVolumeInput.value) / 100 }));
+// Preview the volume once the slider is released.
+soundVolumeInput.addEventListener('change', () => sound.play('diceLand', dice.getState().sound));
+soundUrlInput.addEventListener('change', () => {
+  edit(() => dice.setSound({ url: soundUrlInput.value.trim() }));
+  soundUrlInput.value = dice.getState().sound.url;
+});
 
 // Shake to roll: roll() already ignores shakes while animating.
 let stopShakes: (() => void) | null = null;
