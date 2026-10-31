@@ -3,10 +3,14 @@ import { applyAppearance, mountAppearancePanel } from '../shared/appearance-dom'
 import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
+import { applyDisplayMode } from '../shared/display-mode';
+import { readDisplayOptions } from '../shared/share-link';
 import { DIE_SIDES, MAX_DICE_PER_KIND, type DiceAppearance, type DiceState, type DieSides, createDiceController, formatOutcome } from './controller';
 import { messages } from './messages';
 
 const env = createBrowserEnv();
+const displayOptions = readDisplayOptions(env.url);
+applyDisplayMode(displayOptions);
 const dice = createDiceController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
@@ -27,6 +31,16 @@ const presetSelect = $<HTMLSelectElement>('#preset');
 const presetName = $<HTMLInputElement>('#preset-name');
 const presetNew = $<HTMLButtonElement>('#preset-new');
 const presetDelete = $<HTMLButtonElement>('#preset-delete');
+const sharedNotice = $('#shared-notice');
+const sharedSave = $<HTMLButtonElement>('#shared-save');
+const shareDisplay = $<HTMLInputElement>('#share-display');
+const shareTransparent = $<HTMLInputElement>('#share-transparent');
+const shareCopy = $<HTMLButtonElement>('#share-copy');
+const shareStatus = $('#share-status');
+const shareUrl = $<HTMLInputElement>('#share-url');
+const settingsExport = $<HTMLButtonElement>('#settings-export');
+const settingsImport = $<HTMLInputElement>('#settings-import');
+const importError = $('#settings-import-error');
 const stage = $('#stage');
 const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelector<HTMLElement>('#appearance')!, {
   i18n,
@@ -48,14 +62,20 @@ function renderAddSides() {
 }
 
 function render({ diceSet, appearance, presets, selectedPresetId, outcome, history }: DiceState) {
-  applyAppearance(appearance, { page: document.documentElement, display: stage });
+  applyAppearance(
+    appearance,
+    { page: document.documentElement, display: stage },
+    { forceTransparent: displayOptions.transparent },
+  );
   die.style.setProperty('--die-color', appearance.dieColor);
   die.style.setProperty('--pip-color', appearance.pipColor);
   appearancePanel.update(appearance);
 
   presetSelect.replaceChildren(
+    ...(selectedPresetId === null ? [new Option(t('sharedPreset'), '', false, true)] : []),
     ...presets.map(({ id, name }) => new Option(name || t('unnamedPreset'), id, false, id === selectedPresetId)),
   );
+  sharedNotice.hidden = selectedPresetId !== null;
   const selected = presets.find((preset) => preset.id === selectedPresetId);
   presetName.value = selected?.name ?? '';
   presetName.disabled = !selected;
@@ -89,6 +109,8 @@ function render({ diceSet, appearance, presets, selectedPresetId, outcome, histo
     }),
   );
 
+  shareUrl.value = shareLink();
+
   historyList.replaceChildren(
     ...history.map((entry) => {
       const item = document.createElement('li');
@@ -96,6 +118,14 @@ function render({ diceSet, appearance, presets, selectedPresetId, outcome, histo
       return item;
     }),
   );
+}
+
+function shareLink() {
+  return dice.shareLink({
+    display: shareDisplay.checked,
+    transparent: shareTransparent.checked,
+    lang: i18n.getLocale(),
+  });
 }
 
 /** Runs an edit, then re-renders so inputs holding a value the controller rejected snap back. */
@@ -113,6 +143,13 @@ renderAddSides();
 render(dice.getState());
 
 die.addEventListener('click', () => dice.roll());
+// Space rolls from anywhere (also in Display mode), except while typing or on a focused control.
+document.addEventListener('keydown', (event) => {
+  if (event.code !== 'Space' || event.repeat) return;
+  if (event.target instanceof Element && event.target.closest('input, select, textarea, button')) return;
+  event.preventDefault();
+  dice.roll();
+});
 rollButton.addEventListener('click', () => dice.roll());
 addButton.addEventListener('click', () => dice.addDie(Number(addSides.value) as DieSides));
 presetSelect.addEventListener('change', () => dice.selectPreset(presetSelect.value));
@@ -126,3 +163,33 @@ presetDelete.addEventListener('click', () => {
   if (id) dice.deletePreset(id);
 });
 modifierInput.addEventListener('change', () => edit(() => dice.setModifier(Number(modifierInput.value))));
+sharedSave.addEventListener('click', () => dice.createPreset(t('sharedPresetName')));
+for (const option of [shareDisplay, shareTransparent]) {
+  option.addEventListener('change', () => (shareUrl.value = shareLink()));
+}
+shareCopy.addEventListener('click', async () => {
+  const link = shareLink();
+  shareUrl.value = link;
+  try {
+    await navigator.clipboard.writeText(link);
+    shareStatus.textContent = t('copied');
+  } catch {
+    // Clipboard refused (insecure context, permission): let the user copy by hand.
+    shareStatus.textContent = t('copyFailed');
+    shareUrl.select();
+  }
+});
+shareUrl.addEventListener('focus', () => shareUrl.select());
+settingsExport.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));
+  link.download = 'mywidgetbox-dice-settings.json';
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+settingsImport.addEventListener('change', async () => {
+  const file = settingsImport.files?.[0];
+  if (!file) return;
+  importError.textContent = dice.importSettings(await file.text()) ? '' : t('importError');
+  settingsImport.value = '';
+});

@@ -27,6 +27,8 @@ export interface Appearance {
   fontFamily: string;
   /** Text size in CSS px. */
   fontSize: number;
+  /** `#rrggbb` text color of the display. */
+  textColor: string;
   /** Overall zoom factor of the Widget's display. */
   scale: number;
 }
@@ -39,6 +41,7 @@ export const appearanceDefaults: Appearance = {
   background: { kind: 'solid', color: '#ffffff', imageUrl: '' },
   fontFamily: '',
   fontSize: 20,
+  textColor: '#222222',
   scale: 1,
 };
 
@@ -59,7 +62,7 @@ export function isImageUrl(value: unknown): value is string {
 
 /** Checks the baseline fields; a Widget's `isValid` calls this and checks its own items too. */
 export function isAppearance(value: unknown): value is Appearance {
-  const { background, fontFamily, fontSize, scale } = (value ?? {}) as Partial<Appearance>;
+  const { background, fontFamily, fontSize, textColor, scale } = (value ?? {}) as Partial<Appearance>;
   return (
     typeof background === 'object' &&
     background !== null &&
@@ -69,6 +72,7 @@ export function isAppearance(value: unknown): value is Appearance {
     typeof fontFamily === 'string' &&
     fontFamily.length <= MAX_FONT_FAMILY_LENGTH &&
     inRange(fontSize, FONT_SIZE_RANGE) &&
+    isHexColor(textColor) &&
     inRange(scale, SCALE_RANGE)
   );
 }

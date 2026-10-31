@@ -7,21 +7,31 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="dice__language" id="language"></div>
+    <div class="dice__language" id="language" data-controls></div>
     <main class="dice">
       <div class="dice__stage" id="stage">
         <button type="button" class="dice__die" id="die" aria-live="polite" data-i18n-aria-label="roll">?</button>
         <p class="dice__breakdown" id="breakdown"></p>
       </div>
-      <button type="button" class="dice__roll" id="roll" data-i18n="roll"></button>
+      <button type="button" class="dice__roll" id="roll" data-i18n="roll" data-controls></button>
 
-      <section class="dice__controls">
+      <section class="dice__controls" data-controls>
+        <p class="dice__shared" id="shared-notice" hidden>
+          <span data-i18n="sharedNotice"></span>
+          <button type="button" id="shared-save" data-i18n="saveAsPreset"></button>
+        </p>
+
         <h2 data-i18n="presets"></h2>
         <div class="dice__presets">
           <select id="preset" data-i18n-aria-label="presets"></select>
           <input type="text" id="preset-name" data-i18n-aria-label="presetName" />
           <button type="button" id="preset-new" data-i18n="newPreset"></button>
           <button type="button" id="preset-delete" data-i18n="deletePreset"></button>
+        </div>
+        <div class="dice__presets">
+          <button type="button" id="settings-export" data-i18n="exportSettings"></button>
+          <label><span data-i18n="importSettings"></span> <input type="file" id="settings-import" accept="application/json,.json" /></label>
+          <p id="settings-import-error" role="alert"></p>
         </div>
 
         <h2 data-i18n="diceSet"></h2>
@@ -36,6 +46,17 @@
         </label>
 
         <div class="dice__appearance" id="appearance"></div>
+
+        <h2 data-i18n="shareLink"></h2>
+        <div class="dice__share">
+          <label><input type="checkbox" id="share-display" /> <span data-i18n="shareDisplay"></span></label>
+          <label><input type="checkbox" id="share-transparent" /> <span data-i18n="shareTransparent"></span></label>
+          <div class="dice__share-copy">
+            <button type="button" id="share-copy" data-i18n="copyShareLink"></button>
+            <span id="share-status" role="status"></span>
+          </div>
+          <input type="text" id="share-url" readonly data-i18n-aria-label="shareLink" />
+        </div>
 
         <h2 data-i18n="history"></h2>
         <ol class="dice__history" id="history"></ol>

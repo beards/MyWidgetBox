@@ -17,13 +17,28 @@ export interface AppearanceTargets {
   display: HTMLElement;
 }
 
-/** Applies the baseline appearance. A Widget applies its own items (e.g. colors) itself. */
-export function applyAppearance({ background, fontFamily, fontSize, scale }: Appearance, targets: AppearanceTargets): void {
+export interface ApplyAppearanceOptions {
+  /**
+   * Shows a transparent background whatever the Settings say, without changing them;
+   * used for the Share link's `transparent` Display-mode flag (readDisplayOptions()).
+   */
+  forceTransparent?: boolean;
+}
+
+/**
+ * Applies the baseline appearance; the only place that paints the page background.
+ * A Widget applies its own items (e.g. colors) itself.
+ */
+export function applyAppearance(
+  { background, fontFamily, fontSize, textColor, scale }: Appearance,
+  targets: AppearanceTargets,
+  { forceTransparent = false }: ApplyAppearanceOptions = {},
+): void {
+  const kind = forceTransparent ? 'transparent' : background.kind;
   const { style } = targets.page;
-  style.backgroundColor = background.kind === 'transparent' ? 'transparent' : background.color;
+  style.backgroundColor = kind === 'transparent' ? 'transparent' : background.color;
   // The URL was validated as http(s); href is percent-encoded, so it cannot leave the quotes.
-  style.backgroundImage =
-    background.kind === 'image' && background.imageUrl ? `url("${new URL(background.imageUrl).href}")` : '';
+  style.backgroundImage = kind === 'image' && background.imageUrl ? `url("${new URL(background.imageUrl).href}")` : '';
   style.backgroundSize = 'cover';
   style.backgroundPosition = 'center';
   style.backgroundAttachment = 'fixed';
@@ -31,6 +46,7 @@ export function applyAppearance({ background, fontFamily, fontSize, scale }: App
   const display = targets.display.style;
   display.fontFamily = fontFamily;
   display.fontSize = `${fontSize}px`;
+  display.color = textColor;
   display.zoom = String(scale);
 }
 
@@ -178,6 +194,14 @@ export function mountAppearancePanel<A extends Appearance>(
     fontSize,
     (element, appearance) => ({ ...appearance, fontSize: element.valueAsNumber }),
     (element, appearance) => (element.value = String(appearance.fontSize)),
+  );
+
+  const textColor = input('color');
+  row(() => t('textColor'), textColor);
+  bind(
+    textColor,
+    (element, appearance) => ({ ...appearance, textColor: element.value }),
+    (element, appearance) => (element.value = appearance.textColor),
   );
 
   const scale = input('range', { min: String(SCALE_RANGE.min), max: String(SCALE_RANGE.max), step: '0.05' });

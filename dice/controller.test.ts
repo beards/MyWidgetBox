@@ -1,15 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createBrowserRandom } from '../shared/env';
 import { createTestEnv } from '../shared/test-env';
-import { type VersionedSettings, serializeSettings, settingsStorageKey } from '../shared/settings';
-import {
-  DIE_SIDES,
-  type DiceAppearance,
-  type DieSides,
-  createDiceController,
-  diceSettingsSchema,
-  formatOutcome,
-} from './controller';
+import { settingsStorageKey } from '../shared/settings';
+import { createShareLink } from '../shared/share-link';
+import { DIE_SIDES, type DiceAppearance, type DieSides, createDiceController, formatOutcome } from './controller';
 
 describe('dice controller', () => {
   it('has no Outcome before the first roll', () => {
@@ -342,6 +336,7 @@ describe('dice appearance Settings', () => {
     background: { kind: 'image', color: '#102030', imageUrl: 'https://example.test/bg.png' },
     fontFamily: 'Georgia, serif',
     fontSize: 32,
+    textColor: '#eeeeee',
     scale: 1.5,
     dieColor: '#ff0000',
     pipColor: '#00ff00',
@@ -352,6 +347,7 @@ describe('dice appearance Settings', () => {
       background: { kind: 'solid', color: '#ffffff', imageUrl: '' },
       fontFamily: '',
       fontSize: 20,
+      textColor: '#222222',
       scale: 1,
       dieColor: '#ffffff',
       pipColor: '#222222',
@@ -395,6 +391,7 @@ describe('dice appearance Settings', () => {
     ['a relative image URL', { background: { ...custom.background, imageUrl: 'bg.png' } }],
     ['a font size below the minimum', { fontSize: 2 }],
     ['a font size that is not a number', { fontSize: '20px' }],
+    ['a text color that is not #rrggbb', { textColor: 'white' }],
     ['a scale above the maximum', { scale: 10 }],
     ['a scale of zero', { scale: 0 }],
     ['an overlong font family', { fontFamily: 'x'.repeat(201) }],
@@ -450,13 +447,11 @@ describe('dice appearance Settings', () => {
   });
 
   it('opens a Share link with the same appearance, without writing it to storage', () => {
-    const env = createTestEnv();
-    const sharer = createDiceController(env);
+    const sharer = createDiceController(createTestEnv({ url: 'https://example.test/dice/' }));
     sharer.setAppearance(custom);
-    const link = shareLinkFor(serializeSettings(diceSettingsSchema, { diceSet: sharer.getState().diceSet, appearance: custom }));
 
-    const viewerEnv = createTestEnv({ url: link });
-    const viewer = createDiceController(viewerEnv, { readUrl: readShareLink });
+    const viewerEnv = createTestEnv({ url: sharer.shareLink() });
+    const viewer = createDiceController(viewerEnv);
     expect(viewer.getState().appearance).toEqual(custom);
     expect(viewer.getState().selectedPresetId).toBeNull();
     viewer.setAppearance({ ...custom, scale: 2 });
@@ -464,22 +459,121 @@ describe('dice appearance Settings', () => {
   });
 
   it('falls back to the stored appearance when a Share link carries an invalid one', () => {
-    const env = createTestEnv({ url: shareLinkFor({ version: 1, settings: { appearance: { ...custom, scale: 99 } } }) });
-    createDiceController({ ...env, url: new URL('https://example.test/') }).setAppearance(custom);
+    const page = new URL('https://example.test/dice/');
+    const invalid = { version: 1, settings: { appearance: { ...custom, scale: 99 } } };
+    const env = { ...createTestEnv(), url: new URL(createShareLink(page, invalid)) };
+    createDiceController({ ...env, url: page }).setAppearance(custom);
 
-    expect(createDiceController(env, { readUrl: readShareLink }).getState().appearance).toEqual(custom);
+    expect(createDiceController(env).getState().appearance).toEqual(custom);
   });
 });
 
-// Stand-in Share link encoding for these tests; the real one belongs to the Share link ticket.
-function shareLinkFor(versioned: VersionedSettings): string {
-  return `https://example.test/dice/?s=${encodeURIComponent(JSON.stringify(versioned))}`;
-}
+describe('dice Share link', () => {
+  const page = 'https://example.test/MyWidgetBox/dice/';
 
-function readShareLink(url: URL): VersionedSettings | null {
-  const raw = url.searchParams.get('s');
-  return raw === null ? null : (JSON.parse(raw) as VersionedSettings);
-}
+  it('opens a Share link with the same Settings', () => {
+    const sharer = createDiceController(createTestEnv({ url: page }));
+    sharer.addDie(20);
+    sharer.setCount(6, 3);
+    sharer.setModifier(-2);
+
+    const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
+    expect(opened.getState().diceSet).toEqual(sharer.getState().diceSet);
+  });
+
+  function sharedD20Link() {
+    const sharer = createDiceController(createTestEnv({ url: page }));
+    sharer.setCount(20, 1);
+    sharer.removeDie(6);
+    return sharer.shareLink();
+  }
+
+  /** Storage with one saved Preset holding 4d6. */
+  function envWithSaved4d6(url: string) {
+    const env = createTestEnv({ url: page });
+    createDiceController(env).setCount(6, 4);
+    return { ...env, url: new URL(url) };
+  }
+
+  it('prefers the Share link Settings over stored Settings without writing to storage', () => {
+    const env = envWithSaved4d6(sharedD20Link());
+    const storedBefore = env.storage.getItem(settingsStorageKey('dice'));
+
+    const opened = createDiceController(env);
+    expect(opened.getState().diceSet.groups).toEqual([{ sides: 20, count: 1 }]);
+    expect(opened.getState().selectedPresetId).toBeNull();
+    opened.setModifier(7);
+    expect(opened.getState().diceSet.modifier).toBe(7);
+
+    expect(env.storage.getItem(settingsStorageKey('dice'))).toBe(storedBefore);
+    const reloaded = createDiceController({ ...env, url: new URL(page) });
+    expect(reloaded.getState().diceSet).toEqual({ groups: [{ sides: 6, count: 4 }], modifier: 0 });
+  });
+
+  it('saves the Share link Settings as a Preset only when asked', () => {
+    const env = envWithSaved4d6(sharedD20Link());
+    const opened = createDiceController(env);
+    opened.createPreset('From stream');
+
+    const reloaded = createDiceController({ ...env, url: new URL(page) });
+    expect(reloaded.getState().presets.map((preset) => preset.name)).toEqual(['', 'From stream']);
+    expect(reloaded.getState().diceSet.groups).toEqual([{ sides: 20, count: 1 }]);
+  });
+
+  it('still opens a Share link created by this version of the site', () => {
+    // Frozen copy of a v1 Share link for 2d6 + 1d20 + 3: must keep opening after future changes.
+    const link =
+      `${page}?s=eyJ2ZXJzaW9uIjoxLCJzZXR0aW5ncyI6eyJkaWNlU2V0Ijp7Imdyb3VwcyI6W3sic2lkZXMiOjYsImNvdW50IjoyfSx7InNpZGVzIjoyMCwiY291bnQiOjF9XSwibW9kaWZpZXIiOjN9fX0` +
+      '&display=1&lang=en';
+    expect(createDiceController(createTestEnv({ url: link })).getState().diceSet).toEqual({
+      groups: [
+        { sides: 6, count: 2 },
+        { sides: 20, count: 1 },
+      ],
+      modifier: 3,
+    });
+  });
+
+  it('falls back to stored Settings when the Share link is damaged', () => {
+    const env = envWithSaved4d6(`${page}?s=not-base64!`);
+    expect(createDiceController(env).getState().diceSet.groups).toEqual([{ sides: 6, count: 4 }]);
+  });
+
+  it('adds Display mode, transparent background and language to the Share link', () => {
+    const dice = createDiceController(createTestEnv({ url: `${page}?old=1#top` }));
+    const link = new URL(dice.shareLink({ display: true, transparent: true, lang: 'zh-Hant' }));
+
+    expect(link.origin + link.pathname).toBe(page);
+    expect(link.hash).toBe('');
+    expect(Object.fromEntries(link.searchParams)).toMatchObject({ display: '1', transparent: '1', lang: 'zh-Hant' });
+    expect(link.searchParams.has('old')).toBe(false);
+    expect(Object.fromEntries(new URL(dice.shareLink()).searchParams)).not.toHaveProperty('display');
+  });
+});
+
+describe('dice Settings export / import', () => {
+  it('restores exported Presets and publishes them', () => {
+    const source = createDiceController(createTestEnv());
+    source.setModifier(4);
+    source.createPreset('Fireball');
+    const file = source.exportSettings();
+
+    const dice = createDiceController(createTestEnv());
+    const seen: number[] = [];
+    dice.subscribe((state) => seen.push(state.diceSet.modifier));
+    expect(dice.importSettings(file)).toBe(true);
+    expect(dice.getState().presets.map((preset) => preset.name)).toEqual(['', 'Fireball']);
+    expect(seen).toEqual([4]);
+  });
+
+  it('keeps the current Settings when the file is invalid', () => {
+    const dice = createDiceController(createTestEnv());
+    dice.setModifier(2);
+    const before = dice.getState();
+    expect(dice.importSettings('{"namespace":"timer","version":1,"presets":[{"id":"1","name":"","settings":{}}]}')).toBe(false);
+    expect(dice.getState()).toBe(before);
+  });
+});
 
 /** Production random source (crypto.getRandomValues) with test doubles for browser-only parts. */
 function createBrowserEnvForNode() {
