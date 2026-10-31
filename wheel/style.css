@@ -1,0 +1,226 @@
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: system-ui, sans-serif;
+}
+
+.wheel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+/* Font, text color and scale come from the appearance Settings (applied inline). */
+.wheel__display {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.wheel__stage {
+  width: min(90vw, 28rem);
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.wheel__stage svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.wheel__stage text {
+  font-family: inherit;
+  font-weight: 600;
+}
+
+/* The pop-up over the wheel showing the Outcome; click (or wait) to dismiss. */
+.wheel__result {
+  position: absolute;
+  max-width: 90%;
+  padding: 0.4em 0.9em;
+  border: 4px solid #ffffff;
+  border-radius: 0.5em;
+  box-shadow: 0 0.4em 1.5em rgb(0 0 0 / 0.35);
+  color: #ffffff;
+  font: inherit;
+  font-size: 2.4em;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+  cursor: pointer;
+}
+
+.wheel__result[hidden] {
+  display: none;
+}
+
+.wheel__result--in {
+  animation: wheel-result-in 400ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes wheel-result-in {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel__result--in {
+    animation: none;
+  }
+}
+
+.wheel__actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.wheel__language {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+}
+
+.wheel__spin {
+  font-size: 1.25rem;
+  padding: 0.5rem 1.5rem;
+  cursor: pointer;
+}
+
+.wheel__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 16rem;
+  max-width: min(92vw, 34rem);
+  /* Keeps the controls readable over any appearance background. */
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 0.9);
+  color: #222;
+}
+
+.wheel__controls h2 {
+  margin: 0.75rem 0 0;
+  font-size: 1rem;
+}
+
+.wheel__row,
+.wheel__entries li,
+.wheel__appearance label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wheel__row input[type='text'] {
+  width: 8rem;
+}
+
+.wheel__entries,
+.wheel__history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wheel__entries li {
+  flex-wrap: nowrap;
+}
+
+.wheel__entries input[type='text'] {
+  flex: 1;
+  min-width: 6rem;
+}
+
+.wheel__entries input[type='number'] {
+  width: 4.5rem;
+}
+
+.wheel__entries input[type='color'] {
+  width: 2rem;
+  padding: 0;
+}
+
+.wheel__chance {
+  min-width: 3rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #555;
+}
+
+.wheel__appearance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.wheel__appearance [hidden] {
+  display: none;
+}
+
+.wheel__appearance label > span {
+  min-width: 7rem;
+}
+
+.wheel__appearance input[type='text'],
+.wheel__appearance input[type='url'] {
+  width: 12rem;
+}
+
+.wheel__appearance input[type='number'] {
+  width: 4rem;
+}
+
+.wheel__history {
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.wheel__history li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wheel__swatch {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.wheel__shared {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 0.25rem;
+}
+
+.wheel__shared[hidden] {
+  display: none;
+}
+
+.wheel__share {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
