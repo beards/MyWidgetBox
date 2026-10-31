@@ -156,6 +156,11 @@ body {
   flex-wrap: nowrap;
 }
 
+/* Entries cannot be edited while the wheel spins. */
+.wheel__entries[inert] {
+  opacity: 0.6;
+}
+
 .wheel__entries input[type='text'] {
   flex: 1;
   min-width: 6rem;

@@ -131,7 +131,7 @@ function render(state: WheelState) {
   const selected = presets.find((preset) => preset.id === selectedPresetId);
   presetName.value = selected?.name ?? '';
   presetName.disabled = !selected;
-  presetDelete.disabled = !selected || presets.length === 1;
+  presetDelete.disabled = !selected || presets.length === 1 || animating;
 
   if (animating && outcome && outcome !== playing) {
     playing = outcome;
@@ -144,7 +144,12 @@ function render(state: WheelState) {
   }
   if (!outcome) hideResult();
   spinButton.disabled = animating || allDrawn;
-  addEntryButton.disabled = entries.length >= MAX_ENTRIES;
+  // The controller ignores these mid-spin (the Outcome must match the wheel shown); say so in the UI.
+  addEntryButton.disabled = animating || entries.length >= MAX_ENTRIES;
+  entryList.inert = animating;
+  for (const control of [presetSelect, presetNew, sharedSave, settingsImport, removeAfterDrawInput]) {
+    control.disabled = animating;
+  }
   durationInput.value = String(state.animationDuration / 1000);
   durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
   alwaysFullInput.checked = state.alwaysFullAnimation;
