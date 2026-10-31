@@ -6,6 +6,8 @@ import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { readDisplayOptions } from '../shared/share-link';
+import { createSoundPlayer } from '../shared/sound';
+import { createWakeLock } from '../shared/wake-lock';
 import {
   MAX_DURATION,
   TIMER_MODES,
@@ -14,6 +16,7 @@ import {
   type TimerView,
   createTimerController,
   formatTimer,
+  readAlert,
   readTimer,
 } from './controller';
 import { messages } from './messages';
@@ -43,6 +46,16 @@ const shareUrl = $<HTMLInputElement>('#share-url');
 const settingsExport = $<HTMLButtonElement>('#settings-export');
 const settingsImport = $<HTMLInputElement>('#settings-import');
 const importError = $('#settings-import-error');
+const alertSoundSeconds = $<HTMLInputElement>('#alert-sound-seconds');
+const alertEffectSeconds = $<HTMLInputElement>('#alert-effect-seconds');
+const soundEnabledInput = $<HTMLInputElement>('#sound-enabled');
+const soundVolumeInput = $<HTMLInputElement>('#sound-volume');
+const soundUrlInput = $<HTMLInputElement>('#sound-url');
+
+const sound = createSoundPlayer();
+const wakeLock = createWakeLock();
+/** Stop functions of the alert sounds playing now, by timer id. */
+const alertSounds = new Map<string, () => void>();
 
 const appearancePanel = mountAppearancePanel<Appearance>($('#appearance'), {
   i18n,
@@ -83,7 +96,12 @@ function createCard(id: string): TimerCard {
   });
   toggle.classList.add('timer__toggle');
   const reset = button(() => timer.reset(id));
-  actions.append(toggle, reset);
+  const stop = button(() => {
+    alertSounds.get(id)?.();
+    alertSounds.delete(id);
+    timer.stopAlert(id);
+  });
+  actions.append(toggle, reset, stop);
 
   const settings = document.createElement('div');
   settings.className = 'timer__settings';
@@ -127,9 +145,14 @@ function createCard(id: string): TimerCard {
       status.textContent = reading.status === 'timeUp' ? t('timeUp') : '';
       toggle.textContent = t(reading.status === 'running' ? 'pause' : reading.status === 'paused' ? 'resume' : 'start');
       toggle.disabled = reading.status === 'timeUp';
+      const { effect } = readAlert(view, now, timer.getState().alert);
+      if (effect) root.dataset.alert = '';
+      else delete root.dataset.alert;
+      stop.hidden = !effect && !alertSounds.has(id);
     },
     update(view, now) {
       reset.textContent = t('reset');
+      stop.textContent = t('stopAlert');
       modeLabel.text.textContent = t('mode');
       mode.replaceChildren(...TIMER_MODES.map((key) => new Option(t(MODE_LABELS[key]), key, false, key === view.mode)));
       durationLabel.textContent = t('duration');
@@ -190,15 +213,43 @@ function render(state: TimerState) {
   presetName.value = selected?.name ?? '';
   presetName.disabled = !selected;
   presetDelete.disabled = !selected || presets.length === 1;
+  alertSoundSeconds.value = String(state.alert.soundSeconds);
+  alertEffectSeconds.value = String(state.alert.effectSeconds);
+  soundEnabledInput.checked = state.sound.enabled;
+  soundVolumeInput.value = String(Math.round(state.sound.volume * 100));
+  soundVolumeInput.disabled = !state.sound.enabled;
+  if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
   shareUrl.value = shareLink();
 }
 
 // The shown value is computed from the clock on every frame, so throttled or hidden tabs
 // never drift; only the text that changed is touched.
 function frame() {
+  checkAlerts();
   const now = env.now();
   for (const view of timer.getState().timers) cards.get(view.id)?.tick(view, now);
   requestAnimationFrame(frame);
+}
+
+/** Starts the sound of new time ups and stops sounds whose timer was reset or stopped. */
+function checkAlerts() {
+  for (const { id, soundMs } of timer.takeDueAlerts()) {
+    alertSounds.get(id)?.();
+    const stop = sound.repeat('alert', timer.getState().sound, { interval: 1000, duration: soundMs });
+    alertSounds.set(id, stop);
+    setTimeout(() => {
+      if (alertSounds.get(id) === stop) alertSounds.delete(id);
+    }, soundMs);
+  }
+  const { timers } = timer.getState();
+  for (const [id, stop] of alertSounds) {
+    const view = timers.find((entry) => entry.id === id);
+    if (!view || view.run.alert !== 'fired' || readTimer(view, env.now()).status !== 'timeUp') {
+      stop();
+      alertSounds.delete(id);
+    }
+  }
+  wakeLock.set(timers.some((view) => readTimer(view, env.now()).status === 'running'));
 }
 
 function shareLink() {
@@ -213,6 +264,8 @@ timer.subscribe(render);
 i18n.subscribe(() => render(timer.getState()));
 render(timer.getState());
 requestAnimationFrame(frame);
+// rAF does not run in hidden tabs; this keeps time-up alerts sounding there (throttled to ~1 s).
+setInterval(checkAlerts, 250);
 
 presetSelect.addEventListener('change', () => timer.selectPreset(presetSelect.value));
 presetName.addEventListener('change', () => {
@@ -241,6 +294,22 @@ shareCopy.addEventListener('click', async () => {
   }
 });
 shareUrl.addEventListener('focus', () => shareUrl.select());
+alertSoundSeconds.addEventListener('change', () => {
+  timer.setAlert({ soundSeconds: Number(alertSoundSeconds.value) });
+  alertSoundSeconds.value = String(timer.getState().alert.soundSeconds);
+});
+alertEffectSeconds.addEventListener('change', () => {
+  timer.setAlert({ effectSeconds: Number(alertEffectSeconds.value) });
+  alertEffectSeconds.value = String(timer.getState().alert.effectSeconds);
+});
+soundEnabledInput.addEventListener('change', () => timer.setSound({ enabled: soundEnabledInput.checked }));
+soundVolumeInput.addEventListener('input', () => timer.setSound({ volume: Number(soundVolumeInput.value) / 100 }));
+// Preview the volume once the slider is released.
+soundVolumeInput.addEventListener('change', () => sound.play('alert', timer.getState().sound));
+soundUrlInput.addEventListener('change', () => {
+  timer.setSound({ url: soundUrlInput.value.trim() });
+  soundUrlInput.value = timer.getState().sound.url;
+});
 settingsExport.addEventListener('click', () => {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([timer.exportSettings()], { type: 'application/json' }));
