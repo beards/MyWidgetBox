@@ -18,6 +18,7 @@ import {
   formatTimer,
   readAlert,
   readTimer,
+  visibleTimers,
 } from './controller';
 import { messages } from './messages';
 
@@ -40,6 +41,9 @@ const sharedNotice = $('#shared-notice');
 const sharedSave = $<HTMLButtonElement>('#shared-save');
 const shareDisplay = $<HTMLInputElement>('#share-display');
 const shareTransparent = $<HTMLInputElement>('#share-transparent');
+const shareTimer = $<HTMLSelectElement>('#share-timer');
+const timerAdd = $<HTMLButtonElement>('#timer-add');
+const showFraction = $<HTMLInputElement>('#show-fraction');
 const shareCopy = $<HTMLButtonElement>('#share-copy');
 const shareStatus = $('#share-status');
 const shareUrl = $<HTMLInputElement>('#share-url');
@@ -65,7 +69,12 @@ const appearancePanel = mountAppearancePanel<Appearance>($('#appearance'), {
   },
 });
 
-const MODE_LABELS = { countdown: 'modeCountdown', stopwatch: 'modeStopwatch' } as const;
+const MODE_LABELS = { countdown: 'modeCountdown', targetTime: 'modeTargetTime', stopwatch: 'modeStopwatch' } as const;
+
+/** A timer's name, or a numbered fallback by its position (1-based). */
+function timerLabel(view: TimerView, index: number) {
+  return view.name || t('numberedTimer', { n: index + 1 });
+}
 
 /** The DOM of one timer; built once per timer id and updated in place. */
 interface TimerCard {
@@ -79,6 +88,8 @@ interface TimerCard {
 function createCard(id: string): TimerCard {
   const root = document.createElement('section');
   root.className = 'timer__card';
+  const heading = document.createElement('h2');
+  heading.className = 'timer__name';
   const value = document.createElement('p');
   value.className = 'timer__value';
   const status = document.createElement('p');
@@ -106,9 +117,23 @@ function createCard(id: string): TimerCard {
   const settings = document.createElement('div');
   settings.className = 'timer__settings';
   settings.dataset.controls = '';
+  const name = document.createElement('input');
+  name.type = 'text';
+  name.addEventListener('change', () => timer.renameTimer(id, name.value.trim()));
+  const nameLabel = labelled(name);
   const mode = document.createElement('select');
   mode.addEventListener('change', () => timer.setMode(id, mode.value as TimerMode));
   const modeLabel = labelled(mode);
+  const target = document.createElement('input');
+  target.type = 'time';
+  target.addEventListener('change', () => {
+    timer.setTarget(id, target.value);
+    // Snap back if the controller rejected the value (e.g. cleared).
+    target.value = timer.getState().timers.find((entry) => entry.id === id)!.target;
+  });
+  const targetLabel = labelled(target);
+  targetLabel.wrapper.classList.add('timer__target');
+  const remove = button(() => timer.removeTimer(id));
   const durationRow = document.createElement('div');
   durationRow.className = 'timer__duration';
   const durationLabel = document.createElement('span');
@@ -130,16 +155,16 @@ function createCard(id: string): TimerCard {
     return { key, input };
   });
   durationRow.append(durationLabel, ...parts.map(({ input }) => input));
-  settings.append(modeLabel.wrapper, durationRow);
+  settings.append(nameLabel.wrapper, modeLabel.wrapper, durationRow, targetLabel.wrapper, remove);
 
-  root.append(value, status, actions, settings);
+  root.append(heading, value, status, actions, settings);
 
   let shownValue = '';
   const card: TimerCard = {
     root,
     tick(view, now) {
       const reading = readTimer(view, now);
-      const text = formatTimer(view, now);
+      const text = formatTimer(view, now, { showFraction: timer.getState().showFraction });
       if (text !== shownValue) value.textContent = shownValue = text;
       root.dataset.status = reading.status;
       status.textContent = reading.status === 'timeUp' ? t('timeUp') : '';
@@ -151,6 +176,19 @@ function createCard(id: string): TimerCard {
       stop.hidden = !effect && !alertSounds.has(id);
     },
     update(view, now) {
+      const { timers } = timer.getState();
+      heading.textContent = view.name;
+      heading.hidden = view.name === '';
+      nameLabel.text.textContent = t('timerName');
+      if (document.activeElement !== name) name.value = view.name;
+      name.placeholder = timerLabel(view, timers.indexOf(view));
+      // targetTime timers follow the clock: nothing to start, pause or reset.
+      toggle.hidden = reset.hidden = view.mode === 'targetTime';
+      targetLabel.text.textContent = t('targetTime');
+      targetLabel.wrapper.hidden = view.mode !== 'targetTime';
+      if (document.activeElement !== target) target.value = view.target;
+      remove.textContent = t('removeTimer');
+      remove.hidden = timers.length <= 1;
       reset.textContent = t('reset');
       stop.textContent = t('stopAlert');
       modeLabel.text.textContent = t('mode');
@@ -186,7 +224,9 @@ function labelled(input: HTMLElement) {
 const cards = new Map<string, TimerCard>();
 
 function render(state: TimerState) {
-  const { timers, appearance, presets, selectedPresetId } = state;
+  const { appearance, presets, selectedPresetId } = state;
+  // Display mode can be limited to one timer (`?timer=<id>`); the others get no card.
+  const timers = visibleTimers(state.timers, env.url);
   applyAppearance(appearance, { page: document.documentElement, display: list }, { forceTransparent: displayOptions.transparent });
   appearancePanel.update(appearance);
 
@@ -219,6 +259,13 @@ function render(state: TimerState) {
   soundVolumeInput.value = String(Math.round(state.sound.volume * 100));
   soundVolumeInput.disabled = !state.sound.enabled;
   if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
+  showFraction.checked = state.showFraction;
+  const sharedTimer = state.timers.some((view) => view.id === shareTimer.value) ? shareTimer.value : '';
+  shareTimer.replaceChildren(
+    new Option(t('shareAllTimers'), '', false, sharedTimer === ''),
+    ...state.timers.map((view, index) => new Option(timerLabel(view, index), view.id, false, view.id === sharedTimer)),
+  );
+  shareTimer.disabled = !shareDisplay.checked;
   shareUrl.value = shareLink();
 }
 
@@ -233,7 +280,10 @@ function frame() {
 
 /** Starts the sound of new time ups and stops sounds whose timer was reset or stopped. */
 function checkAlerts() {
+  const shown = visibleTimers(timer.getState().timers, env.url);
   for (const { id, soundMs } of timer.takeDueAlerts()) {
+    // A page showing one timer (an OBS source) only sounds for that timer.
+    if (!shown.some((view) => view.id === id)) continue;
     alertSounds.get(id)?.();
     const stop = sound.repeat('alert', timer.getState().sound, { interval: 1000, duration: soundMs });
     alertSounds.set(id, stop);
@@ -257,6 +307,7 @@ function shareLink() {
     display: shareDisplay.checked,
     transparent: shareTransparent.checked,
     lang: i18n.getLocale(),
+    timer: shareDisplay.checked && shareTimer.value ? shareTimer.value : undefined,
   });
 }
 
@@ -278,9 +329,14 @@ presetDelete.addEventListener('click', () => {
   if (id) timer.deletePreset(id);
 });
 sharedSave.addEventListener('click', () => timer.createPreset(t('sharedPresetName')));
-for (const option of [shareDisplay, shareTransparent]) {
-  option.addEventListener('change', () => (shareUrl.value = shareLink()));
+for (const option of [shareDisplay, shareTransparent, shareTimer]) {
+  option.addEventListener('change', () => {
+    shareTimer.disabled = !shareDisplay.checked;
+    shareUrl.value = shareLink();
+  });
 }
+timerAdd.addEventListener('click', () => timer.addTimer());
+showFraction.addEventListener('change', () => timer.setShowFraction(showFraction.checked));
 shareCopy.addEventListener('click', async () => {
   const link = shareLink();
   shareUrl.value = link;

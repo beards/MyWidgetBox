@@ -10,6 +10,7 @@
     <div class="timer__language" id="language" data-controls></div>
     <main class="timer">
       <div class="timer__list" id="timers"></div>
+      <button type="button" class="timer__add" id="timer-add" data-controls data-i18n="addTimer"></button>
 
       <section class="timer__controls" data-controls>
         <p class="timer__shared" id="shared-notice" hidden>
@@ -30,6 +31,9 @@
           <p id="settings-import-error" role="alert"></p>
         </div>
 
+        <h2 data-i18n="timers"></h2>
+        <label><input type="checkbox" id="show-fraction" /> <span data-i18n="showFraction"></span></label>
+
         <h2 data-i18n="alert"></h2>
         <div class="timer__alert">
           <label><span data-i18n="alertSoundSeconds"></span> <input type="number" id="alert-sound-seconds" min="1" max="60" step="1" /></label>
@@ -45,6 +49,7 @@
         <div class="timer__share">
           <label><input type="checkbox" id="share-display" /> <span data-i18n="shareDisplay"></span></label>
           <label><input type="checkbox" id="share-transparent" /> <span data-i18n="shareTransparent"></span></label>
+          <label><span data-i18n="shareTimer"></span> <select id="share-timer"></select></label>
           <div class="timer__row">
             <button type="button" id="share-copy" data-i18n="copyShareLink"></button>
             <span id="share-status" role="status"></span>

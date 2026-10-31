@@ -19,6 +19,16 @@ export type TimerMessageKey =
   | 'mode'
   | 'modeCountdown'
   | 'modeStopwatch'
+  | 'modeTargetTime'
+  | 'targetTime'
+  | 'timerName'
+  | 'numberedTimer'
+  | 'addTimer'
+  | 'removeTimer'
+  | 'timers'
+  | 'showFraction'
+  | 'shareTimer'
+  | 'shareAllTimers'
   | 'duration'
   | 'hours'
   | 'minutes'
@@ -63,6 +73,16 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
     mode: 'Mode',
     modeCountdown: 'Countdown',
     modeStopwatch: 'Stopwatch',
+    modeTargetTime: 'Countdown to a time',
+    targetTime: 'Time',
+    timerName: 'Name',
+    numberedTimer: 'Timer {n}',
+    addTimer: 'Add timer',
+    removeTimer: 'Remove',
+    timers: 'Timers',
+    showFraction: 'Show hundredths of a second',
+    shareTimer: 'Display mode shows',
+    shareAllTimers: 'All timers',
     duration: 'Duration',
     hours: 'Hours',
     minutes: 'Minutes',
@@ -106,6 +126,16 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
     mode: '模式',
     modeCountdown: '倒數',
     modeStopwatch: '碼表',
+    modeTargetTime: '倒數到時刻',
+    targetTime: '時刻',
+    timerName: '名稱',
+    numberedTimer: '計時器 {n}',
+    addTimer: '新增計時器',
+    removeTimer: '刪除',
+    timers: '計時器',
+    showFraction: '顯示小數秒（百分之一秒）',
+    shareTimer: 'Display mode 顯示',
+    shareAllTimers: '全部計時器',
     duration: '時長',
     hours: '時',
     minutes: '分',

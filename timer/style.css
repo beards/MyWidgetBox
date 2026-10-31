@@ -94,8 +94,24 @@ body {
   gap: 0.5rem;
 }
 
-.timer__duration[hidden] {
+.timer__duration[hidden],
+.timer__target[hidden] {
   display: none;
+}
+
+.timer__name {
+  margin: 0;
+  font-size: 0.35em;
+  font-weight: normal;
+}
+
+.timer__settings input[type='text'] {
+  width: 8rem;
+}
+
+.timer__add {
+  font-size: 1rem;
+  cursor: pointer;
 }
 
 .timer__duration input {
