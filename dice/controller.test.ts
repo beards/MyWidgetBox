@@ -418,6 +418,89 @@ describe('dice Settings persistence and Presets', () => {
   });
 });
 
+describe('dice Share link', () => {
+  const page = 'https://example.test/MyWidgetBox/dice/';
+
+  it('opens a Share link with the same Settings', () => {
+    const sharer = createDiceController(createTestEnv({ url: page }));
+    sharer.addDie(20);
+    sharer.setCount(6, 3);
+    sharer.setModifier(-2);
+
+    const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
+    expect(opened.getState().diceSet).toEqual(sharer.getState().diceSet);
+  });
+
+  function sharedD20Link() {
+    const sharer = createDiceController(createTestEnv({ url: page }));
+    sharer.setCount(20, 1);
+    sharer.removeDie(6);
+    return sharer.shareLink();
+  }
+
+  /** Storage with one saved Preset holding 4d6. */
+  function envWithSaved4d6(url: string) {
+    const env = createTestEnv({ url: page });
+    createDiceController(env).setCount(6, 4);
+    return { ...env, url: new URL(url) };
+  }
+
+  it('prefers the Share link Settings over stored Settings without writing to storage', () => {
+    const env = envWithSaved4d6(sharedD20Link());
+    const storedBefore = env.storage.getItem(settingsStorageKey('dice'));
+
+    const opened = createDiceController(env);
+    expect(opened.getState().diceSet.groups).toEqual([{ sides: 20, count: 1 }]);
+    expect(opened.getState().selectedPresetId).toBeNull();
+    opened.setModifier(7);
+    expect(opened.getState().diceSet.modifier).toBe(7);
+
+    expect(env.storage.getItem(settingsStorageKey('dice'))).toBe(storedBefore);
+    const reloaded = createDiceController({ ...env, url: new URL(page) });
+    expect(reloaded.getState().diceSet).toEqual({ groups: [{ sides: 6, count: 4 }], modifier: 0 });
+  });
+
+  it('saves the Share link Settings as a Preset only when asked', () => {
+    const env = envWithSaved4d6(sharedD20Link());
+    const opened = createDiceController(env);
+    opened.createPreset('From stream');
+
+    const reloaded = createDiceController({ ...env, url: new URL(page) });
+    expect(reloaded.getState().presets.map((preset) => preset.name)).toEqual(['', 'From stream']);
+    expect(reloaded.getState().diceSet.groups).toEqual([{ sides: 20, count: 1 }]);
+  });
+
+  it('still opens a Share link created by this version of the site', () => {
+    // Frozen copy of a v1 Share link for 2d6 + 1d20 + 3: must keep opening after future changes.
+    const link =
+      `${page}?s=eyJ2ZXJzaW9uIjoxLCJzZXR0aW5ncyI6eyJkaWNlU2V0Ijp7Imdyb3VwcyI6W3sic2lkZXMiOjYsImNvdW50IjoyfSx7InNpZGVzIjoyMCwiY291bnQiOjF9XSwibW9kaWZpZXIiOjN9fX0` +
+      '&display=1&lang=en';
+    expect(createDiceController(createTestEnv({ url: link })).getState().diceSet).toEqual({
+      groups: [
+        { sides: 6, count: 2 },
+        { sides: 20, count: 1 },
+      ],
+      modifier: 3,
+    });
+  });
+
+  it('falls back to stored Settings when the Share link is damaged', () => {
+    const env = envWithSaved4d6(`${page}?s=not-base64!`);
+    expect(createDiceController(env).getState().diceSet.groups).toEqual([{ sides: 6, count: 4 }]);
+  });
+
+  it('adds Display mode, transparent background and language to the Share link', () => {
+    const dice = createDiceController(createTestEnv({ url: `${page}?old=1#top` }));
+    const link = new URL(dice.shareLink({ display: true, transparent: true, lang: 'zh-Hant' }));
+
+    expect(link.origin + link.pathname).toBe(page);
+    expect(link.hash).toBe('');
+    expect(Object.fromEntries(link.searchParams)).toMatchObject({ display: '1', transparent: '1', lang: 'zh-Hant' });
+    expect(link.searchParams.has('old')).toBe(false);
+    expect(Object.fromEntries(new URL(dice.shareLink()).searchParams)).not.toHaveProperty('display');
+  });
+});
+
 describe('dice Settings export / import', () => {
   it('restores exported Presets and publishes them', () => {
     const source = createDiceController(createTestEnv());

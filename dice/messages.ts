@@ -20,6 +20,16 @@ export type DiceMessageKey =
   | 'newPreset'
   | 'newPresetName'
   | 'deletePreset'
+  | 'sharedPreset'
+  | 'sharedNotice'
+  | 'saveAsPreset'
+  | 'sharedPresetName'
+  | 'shareLink'
+  | 'shareDisplay'
+  | 'shareTransparent'
+  | 'copyShareLink'
+  | 'copied'
+  | 'copyFailed'
   | 'exportSettings'
   | 'importSettings'
   | 'importError';
@@ -45,6 +55,16 @@ export const messages: MessageTables<DiceMessageKey> = {
     newPreset: 'Save as new',
     newPresetName: 'Preset {n}',
     deletePreset: 'Delete',
+    sharedPreset: 'From Share link (not saved)',
+    sharedNotice: 'Opened from a Share link. Changes are not saved.',
+    saveAsPreset: 'Save as Preset',
+    sharedPresetName: 'From Share link',
+    shareLink: 'Share link',
+    shareDisplay: 'Display mode (hide controls)',
+    shareTransparent: 'Transparent background',
+    copyShareLink: 'Copy Share link',
+    copied: 'Copied',
+    copyFailed: 'Copy the link below',
     exportSettings: 'Export',
     importSettings: 'Import',
     importError: 'This file could not be imported. Your Settings were not changed.',
@@ -69,6 +89,16 @@ export const messages: MessageTables<DiceMessageKey> = {
     newPreset: '另存新 Preset',
     newPresetName: 'Preset {n}',
     deletePreset: '刪除',
+    sharedPreset: '來自 Share link（未保存）',
+    sharedNotice: '以 Share link 開啟，變更不會被保存。',
+    saveAsPreset: '保存為 Preset',
+    sharedPresetName: '來自 Share link',
+    shareLink: 'Share link',
+    shareDisplay: 'Display mode（隱藏控制介面）',
+    shareTransparent: '透明背景',
+    copyShareLink: '複製 Share link',
+    copied: '已複製',
+    copyFailed: '請複製下方連結',
     exportSettings: '匯出',
     importSettings: '匯入',
     importError: '無法匯入此檔案，現有 Settings 未變更。',

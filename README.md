@@ -33,6 +33,8 @@ shared/             opt-in modules any Widget may use
   random.ts         unbiased random integers (rejection sampling)
   i18n.ts           UI text: message tables, language resolution (?lang= > saved choice > browser)
   i18n-dom.ts       binds data-i18n attributes and mounts the language switcher
+  share-link.ts     Share link encoding/decoding (?s=, display, transparent, lang)
+  display-mode.ts   Display mode: hides [data-controls] elements, optional transparent background
 dice/               one directory per Widget, served at /<name>/
   index.html        page entry
   main.ts           view layer: DOM, animation, sound

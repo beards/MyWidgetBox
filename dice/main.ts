@@ -2,6 +2,8 @@
 import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
+import { applyDisplayMode } from '../shared/display-mode';
+import { readDisplayOptions } from '../shared/share-link';
 import {
   DIE_SIDES,
   MAX_DICE_PER_KIND,
@@ -17,6 +19,7 @@ import { messages } from './messages';
 import { createDiceScene } from './scene';
 
 const env = createBrowserEnv();
+applyDisplayMode(readDisplayOptions(env.url));
 const dice = createDiceController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
@@ -37,6 +40,13 @@ const presetSelect = $<HTMLSelectElement>('#preset');
 const presetName = $<HTMLInputElement>('#preset-name');
 const presetNew = $<HTMLButtonElement>('#preset-new');
 const presetDelete = $<HTMLButtonElement>('#preset-delete');
+const sharedNotice = $('#shared-notice');
+const sharedSave = $<HTMLButtonElement>('#shared-save');
+const shareDisplay = $<HTMLInputElement>('#share-display');
+const shareTransparent = $<HTMLInputElement>('#share-transparent');
+const shareCopy = $<HTMLButtonElement>('#share-copy');
+const shareStatus = $('#share-status');
+const shareUrl = $<HTMLInputElement>('#share-url');
 const settingsExport = $<HTMLButtonElement>('#settings-export');
 const settingsImport = $<HTMLInputElement>('#settings-import');
 const importError = $('#settings-import-error');
@@ -60,8 +70,10 @@ function renderAddSides() {
 function render(state: DiceState) {
   const { diceSet, presets, selectedPresetId, outcome, history, animating } = state;
   presetSelect.replaceChildren(
+    ...(selectedPresetId === null ? [new Option(t('sharedPreset'), '', false, true)] : []),
     ...presets.map(({ id, name }) => new Option(name || t('unnamedPreset'), id, false, id === selectedPresetId)),
   );
+  sharedNotice.hidden = selectedPresetId !== null;
   const selected = presets.find((preset) => preset.id === selectedPresetId);
   presetName.value = selected?.name ?? '';
   presetName.disabled = !selected;
@@ -104,6 +116,8 @@ function render(state: DiceState) {
     }),
   );
 
+  shareUrl.value = shareLink();
+
   // While animating, the newest entry would give the Outcome away before the dice land.
   historyList.replaceChildren(
     ...history.slice(animating ? 1 : 0).map((entry) => {
@@ -117,6 +131,14 @@ function render(state: DiceState) {
 /** Before the first roll, show the dice set with every die on its highest face. */
 function restingDice({ groups }: DiceSet) {
   return groups.flatMap(({ sides, count }) => Array.from({ length: count }, () => ({ sides, value: sides })));
+}
+
+function shareLink() {
+  return dice.shareLink({
+    display: shareDisplay.checked,
+    transparent: shareTransparent.checked,
+    lang: i18n.getLocale(),
+  });
 }
 
 /** Runs an edit, then re-renders so inputs holding a value the controller rejected snap back. */
@@ -134,6 +156,17 @@ renderAddSides();
 render(dice.getState());
 
 die.addEventListener('click', () => dice.roll());
+// Space rolls and R resets from anywhere (also in Display mode), except while typing or on a focused control.
+document.addEventListener('keydown', (event) => {
+  if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target instanceof Element && event.target.closest('input, select, textarea, button')) return;
+  if (event.code === 'Space') {
+    event.preventDefault();
+    dice.roll();
+  } else if (event.key === 'r' || event.key === 'R') {
+    dice.reset();
+  }
+});
 rollButton.addEventListener('click', () => dice.roll());
 addButton.addEventListener('click', () => dice.addDie(Number(addSides.value) as DieSides));
 presetSelect.addEventListener('change', () => dice.selectPreset(presetSelect.value));
@@ -147,24 +180,26 @@ presetDelete.addEventListener('click', () => {
   if (id) dice.deletePreset(id);
 });
 modifierInput.addEventListener('change', () => edit(() => dice.setModifier(Number(modifierInput.value))));
+sharedSave.addEventListener('click', () => dice.createPreset(t('sharedPresetName')));
+for (const option of [shareDisplay, shareTransparent]) {
+  option.addEventListener('change', () => (shareUrl.value = shareLink()));
+}
+shareCopy.addEventListener('click', async () => {
+  const link = shareLink();
+  shareUrl.value = link;
+  try {
+    await navigator.clipboard.writeText(link);
+    shareStatus.textContent = t('copied');
+  } catch {
+    // Clipboard refused (insecure context, permission): let the user copy by hand.
+    shareStatus.textContent = t('copyFailed');
+    shareUrl.select();
+  }
+});
+shareUrl.addEventListener('focus', () => shareUrl.select());
 resetButton.addEventListener('click', () => dice.reset());
 durationInput.addEventListener('input', () => dice.setAnimationDuration(Number(durationInput.value) * 1000));
 alwaysFullInput.addEventListener('change', () => dice.setAlwaysFullAnimation(alwaysFullInput.checked));
-
-// Space rolls and R resets, unless the key belongs to a focused control
-// (a focused button already handles Space itself, e.g. the dice).
-document.addEventListener('keydown', (event) => {
-  if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-  const target = event.target as HTMLElement;
-  if (target.closest('input, select, textarea, [contenteditable]')) return;
-  if (event.code === 'Space') {
-    if (target.closest('button')) return;
-    event.preventDefault();
-    dice.roll();
-  } else if (event.key === 'r' || event.key === 'R') {
-    dice.reset();
-  }
-});
 settingsExport.addEventListener('click', () => {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));
