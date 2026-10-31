@@ -1,0 +1,3 @@
+# Dice physics is pre-simulated, then faces are relabelled
+
+The dice Outcome is decided before the animation (by the controller's random source), yet the dice should tumble across a table with real physics. We run the physics simulation (cannon-es) off-screen to completion first, read which face of each die ended up on top, remap that die's face labels so the top face shows the decided value, then play back the recorded trajectory. The physics only stages the roll; it never decides it. This keeps Outcomes fair, testable and independent of frame rate or browser, at the cost of the trajectory being "theatre" — don't "fix" it by reading the result from the physics.
