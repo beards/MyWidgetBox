@@ -1,6 +1,13 @@
 import type { Env } from '../shared/env';
 import { randomBelow } from '../shared/random';
-import { type PresetSummary, type SettingsSchema, type SettingsStoreOptions, createSettingsStore } from '../shared/settings';
+import {
+  type PresetSummary,
+  type SettingsSchema,
+  type SettingsStoreOptions,
+  createSettingsStore,
+  serializeSettings,
+} from '../shared/settings';
+import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
 
 export const DIE_SIDES = [4, 6, 8, 10, 12, 20, 100] as const;
 export type DieSides = (typeof DIE_SIDES)[number];
@@ -64,6 +71,8 @@ export interface DiceController {
   renamePreset(id: string, name: string): void;
   /** The last remaining Preset cannot be deleted. */
   deletePreset(id: string): void;
+  /** A Share link to this page carrying the Settings in effect. */
+  shareLink(options?: ShareLinkOptions): string;
 }
 
 export const MAX_DICE_PER_KIND = 99;
@@ -93,8 +102,14 @@ function isDiceSet(value: unknown): value is DiceSet {
   );
 }
 
-/** Headless dice logic: no DOM, all outside-world access goes through env. */
-export function createDiceController(env: Env, settingsOptions?: SettingsStoreOptions): DiceController {
+/**
+ * Headless dice logic: no DOM, all outside-world access goes through env.
+ * Settings carried by a Share link in env.url take priority over stored ones.
+ */
+export function createDiceController(
+  env: Env,
+  settingsOptions: SettingsStoreOptions = { readUrl: readShareLinkSettings },
+): DiceController {
   const settings = createSettingsStore(env, diceSettingsSchema, settingsOptions);
   let state: DiceState = { ...fromSettings(), outcome: null, history: [] };
   const listeners = new Set<(state: DiceState) => void>();
@@ -165,6 +180,8 @@ export function createDiceController(env: Env, settingsOptions?: SettingsStoreOp
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
     deletePreset: (id) => changeSettings(() => settings.deletePreset(id)),
+    shareLink: (options) =>
+      createShareLink(env.url, serializeSettings(diceSettingsSchema, settings.getSnapshot().settings), options),
   };
 }
 
