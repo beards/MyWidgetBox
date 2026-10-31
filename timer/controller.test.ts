@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../shared/env';
 import { createTestEnv } from '../shared/test-env';
-import { MAX_DURATION, createTimerController, formatTimer, readTimer } from './controller';
+import { MAX_DURATION, createTimerController, formatTimer, readAlert, readTimer } from './controller';
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -289,5 +289,175 @@ describe('Settings', () => {
     unsubscribe();
     timer.reset(id);
     expect(calls).toBe(2);
+  });
+});
+
+describe('time-up alert', () => {
+  it('fires once when a countdown runs out, with the sound time left', () => {
+    const { env, timer, id } = setup();
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(9 * SECOND);
+    expect(timer.takeDueAlerts()).toEqual([]);
+    env.advance(SECOND + 200);
+    expect(timer.takeDueAlerts()).toEqual([{ id, soundMs: 5 * SECOND - 200 }]);
+    env.advance(100);
+    expect(timer.takeDueAlerts()).toEqual([]);
+  });
+
+  it('does not replay after a reload of an already-alerted timer', () => {
+    const { env, timer, id } = setup();
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(11 * SECOND);
+    expect(timer.takeDueAlerts()).toHaveLength(1);
+    env.advance(SECOND);
+    expect(open(env).timer.takeDueAlerts()).toEqual([]);
+  });
+
+  it('a reload during the sound time of a not-yet-alerted time up plays only the rest', () => {
+    const { env, timer, id } = setup();
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(12 * SECOND);
+    expect(open(env).timer.takeDueAlerts()).toEqual([{ id, soundMs: 3 * SECOND }]);
+  });
+
+  it('a countdown that ran out while closed opens without sound', () => {
+    const { env, timer, id } = setup();
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(HOUR);
+    const reopened = open(env);
+    expect(reopened.timer.takeDueAlerts()).toEqual([]);
+    expect(readAlert(reopened.first(), env.now(), reopened.timer.getState().alert)).toEqual({ effect: false });
+  });
+
+  it('never alerts for a stopwatch or a paused countdown', () => {
+    const { env, timer, id } = setup();
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(5 * SECOND);
+    timer.pause(id);
+    env.advance(HOUR);
+    expect(timer.takeDueAlerts()).toEqual([]);
+    timer.setMode(id, 'stopwatch');
+    timer.start(id);
+    env.advance(HOUR);
+    expect(timer.takeDueAlerts()).toEqual([]);
+  });
+
+  it('shows the effect from time up for the set seconds', () => {
+    const { env, timer, first, id } = setup();
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    const effect = () => readAlert(first(), env.now(), timer.getState().alert).effect;
+    env.advance(10 * SECOND - 1);
+    expect(effect()).toBe(false);
+    env.advance(1);
+    expect(effect()).toBe(true);
+    env.advance(10 * SECOND - 1);
+    expect(effect()).toBe(true);
+    env.advance(1);
+    expect(effect()).toBe(false);
+  });
+
+  it('with 0 effect seconds, shows the effect until stopped, also across reloads', () => {
+    const { env, timer, id } = setup();
+    timer.setAlert({ effectSeconds: 0 });
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(HOUR);
+    const reopened = open(env);
+    const effect = () => readAlert(reopened.first(), env.now(), reopened.timer.getState().alert).effect;
+    expect(effect()).toBe(true);
+    reopened.timer.stopAlert(id);
+    expect(effect()).toBe(false);
+    expect(readAlert(open(env).first(), env.now(), reopened.timer.getState().alert).effect).toBe(false);
+  });
+
+  it('stopping is ignored before time up and sticks after it', () => {
+    const { env, timer, id } = setup();
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    timer.stopAlert(id);
+    env.advance(10 * SECOND);
+    expect(timer.takeDueAlerts()).toHaveLength(1);
+    timer.stopAlert(id);
+    expect(timer.getState().timers[0]!.run.alert).toBe('stopped');
+    expect(open(env).timer.takeDueAlerts()).toEqual([]);
+  });
+
+  it('alerts again after a reset and a new run', () => {
+    const { env, timer, id } = setup();
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(10 * SECOND);
+    expect(timer.takeDueAlerts()).toHaveLength(1);
+    timer.reset(id);
+    timer.start(id);
+    env.advance(10 * SECOND);
+    expect(timer.takeDueAlerts()).toEqual([{ id, soundMs: 5 * SECOND }]);
+  });
+});
+
+describe('alert and sound Settings', () => {
+  it('defaults to 5 s of sound and 10 s of effect', () => {
+    const { timer } = setup();
+    expect(timer.getState().alert).toEqual({ soundSeconds: 5, effectSeconds: 10 });
+    expect(timer.getState().sound).toEqual({ enabled: true, volume: 0.7, url: '' });
+  });
+
+  it('applies valid values, ignores invalid ones, and remembers them', () => {
+    const { env, timer } = setup();
+    timer.setAlert({ soundSeconds: 20 });
+    timer.setAlert({ soundSeconds: 0 });
+    timer.setAlert({ effectSeconds: 1.5 });
+    timer.setAlert({ effectSeconds: -1 });
+    timer.setSound({ url: 'https://example.test/ding.mp3' });
+    timer.setSound({ url: 'javascript:alert(1)' });
+    timer.setSound({ volume: 2 });
+    const reopened = open(env).timer.getState();
+    expect(reopened.alert).toEqual({ soundSeconds: 20, effectSeconds: 10 });
+    expect(reopened.sound).toEqual({ enabled: true, volume: 0.7, url: 'https://example.test/ding.mp3' });
+  });
+
+  it('uses the set sound seconds for the alert', () => {
+    const { env, timer, id } = setup();
+    timer.setAlert({ soundSeconds: 30 });
+    timer.setDuration(id, 10 * SECOND);
+    timer.start(id);
+    env.advance(10 * SECOND);
+    expect(timer.takeDueAlerts()).toEqual([{ id, soundMs: 30 * SECOND }]);
+  });
+
+  it('Settings stored before alert and sound existed still load, with the defaults', () => {
+    const env = createTestEnv({ now: 1_700_000_000_000 });
+    env.storage.setItem(
+      'mywidgetbox:timer:settings',
+      JSON.stringify({
+        version: 1,
+        presets: [
+          {
+            id: 'p1',
+            name: 'old',
+            settings: { timers: [{ id: '1', name: '', mode: 'countdown', duration: 7 * MINUTE }], appearance: setup().timer.getState().appearance },
+          },
+        ],
+        selectedPresetId: 'p1',
+      }),
+    );
+    const state = open(env).timer.getState();
+    expect(state.timers[0]!.duration).toBe(7 * MINUTE);
+    expect(state.alert).toEqual({ soundSeconds: 5, effectSeconds: 10 });
+  });
+
+  it('a Share link carries the alert and sound Settings', () => {
+    const { timer } = setup();
+    timer.setAlert({ soundSeconds: 3, effectSeconds: 0 });
+    timer.setSound({ enabled: false });
+    const shared = open(createTestEnv({ url: timer.shareLink() })).timer.getState();
+    expect(shared.alert).toEqual({ soundSeconds: 3, effectSeconds: 0 });
+    expect(shared.sound.enabled).toBe(false);
   });
 });
