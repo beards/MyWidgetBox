@@ -33,6 +33,12 @@ export interface DiceState {
   outcome: DiceOutcome | null;
   /** The most recent Outcomes, newest first, at most HISTORY_LIMIT; kept in memory only. */
   history: DiceOutcome[];
+  /** True from a roll until the view reports its animation finished; rolls are ignored meanwhile. */
+  animating: boolean;
+  /** Length of a full roll animation in ms, MIN_ANIMATION_DURATION..MAX_ANIMATION_DURATION. */
+  animationDuration: number;
+  /** Play the full animation even when the system asks for reduced motion. */
+  alwaysFullAnimation: boolean;
 }
 
 export interface DiceController {
@@ -47,17 +53,36 @@ export interface DiceController {
   setCount(sides: DieSides, count: number): void;
   /** Sets the fixed integer added to every total; non-integers are ignored. */
   setModifier(modifier: number): void;
+  /** Decides a new Outcome and starts animating it; ignored while animating. */
   roll(): void;
+  /** Called by the view when the animation of the current Outcome has finished. */
+  finishAnimation(): void;
+  /** Clears the Outcome and history (the dice set is kept); ignored while animating. */
+  reset(): void;
+  /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
+  setAnimationDuration(ms: number): void;
+  setAlwaysFullAnimation(always: boolean): void;
 }
 
 export const MAX_DICE_PER_KIND = 99;
 export const HISTORY_LIMIT = 20;
+export const MIN_ANIMATION_DURATION = 1000;
+export const MAX_ANIMATION_DURATION = 10_000;
+/** Duration of the quick reveal that replaces the roll animation under reduced motion. */
+export const REDUCED_MOTION_DURATION = 300;
 
 const DEFAULT_DICE_SET: DiceSet = { groups: [{ sides: 6, count: 1 }], modifier: 0 };
 
 /** Headless dice logic: no DOM, all outside-world access goes through env. */
 export function createDiceController(env: Env): DiceController {
-  let state: DiceState = { diceSet: DEFAULT_DICE_SET, outcome: null, history: [] };
+  let state: DiceState = {
+    diceSet: DEFAULT_DICE_SET,
+    outcome: null,
+    history: [],
+    animating: false,
+    animationDuration: 3000,
+    alwaysFullAnimation: false,
+  };
   const listeners = new Set<(state: DiceState) => void>();
 
   function update(next: Partial<DiceState>) {
@@ -99,15 +124,36 @@ export function createDiceController(env: Env): DiceController {
       update({ diceSet: { ...state.diceSet, modifier } });
     },
     roll() {
+      if (state.animating) return;
       const { groups, modifier } = state.diceSet;
       const rolls = groups.flatMap(({ sides, count }) =>
         Array.from({ length: count }, () => ({ sides, value: randomBelow(env.randomUint32, sides) + 1 })),
       );
       const total = rolls.reduce((sum, roll) => sum + roll.value, modifier);
       const outcome = { rolls, modifier, total };
-      update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT) });
+      update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT), animating: true });
     },
+    finishAnimation() {
+      if (state.animating) update({ animating: false });
+    },
+    reset() {
+      if (!state.animating) update({ outcome: null, history: [] });
+    },
+    setAnimationDuration(ms) {
+      if (!(ms >= MIN_ANIMATION_DURATION && ms <= MAX_ANIMATION_DURATION)) return;
+      update({ animationDuration: ms });
+    },
+    setAlwaysFullAnimation: (always) => update({ alwaysFullAnimation: always }),
   };
+}
+
+/** How the view should animate a roll, given whether the system asks for reduced motion. */
+export function animationFor(
+  { animationDuration, alwaysFullAnimation }: DiceState,
+  prefersReducedMotion: boolean,
+): { duration: number; reduced: boolean } {
+  const reduced = prefersReducedMotion && !alwaysFullAnimation;
+  return { duration: reduced ? REDUCED_MOTION_DURATION : animationDuration, reduced };
 }
 
 /** Total and breakdown, e.g. `17 = 12 + 3 + 2`; just the total when there is nothing to break down. */

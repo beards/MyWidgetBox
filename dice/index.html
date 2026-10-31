@@ -8,9 +8,12 @@
   </head>
   <body>
     <main class="dice">
-      <button type="button" class="dice__die" id="die" aria-live="polite">?</button>
-      <p class="dice__breakdown" id="breakdown"></p>
-      <button type="button" class="dice__roll" id="roll"></button>
+      <button type="button" class="dice__stage" id="die"></button>
+      <p class="dice__breakdown" id="breakdown" aria-live="polite"></p>
+      <div class="dice__actions">
+        <button type="button" class="dice__roll" id="roll"></button>
+        <button type="button" id="reset"></button>
+      </div>
 
       <section class="dice__controls">
         <h2 id="dice-set-heading"></h2>
@@ -22,6 +25,15 @@
         <label class="dice__modifier">
           <span id="modifier-label"></span>
           <input type="number" id="modifier" step="1" value="0" />
+        </label>
+        <label class="dice__duration">
+          <span id="duration-label"></span>
+          <input type="range" id="duration" min="1" max="10" step="0.5" />
+          <output id="duration-value" for="duration"></output>
+        </label>
+        <label class="dice__full-animation">
+          <input type="checkbox" id="always-full" />
+          <span id="always-full-label"></span>
         </label>
 
         <h2 id="history-heading"></h2>
