@@ -40,13 +40,14 @@ export interface SoundPlayer {
   /** Plays once with these Settings; silent when they turn sound off. Never throws. */
   play(sound: BuiltInSound, settings: SoundSettings): void;
   /**
-   * Plays now and then every `interval` ms while less than `duration` ms have passed (e.g. a timer alert).
+   * Plays now and then every `interval` ms while less than `duration` ms have passed on the clock (e.g. a timer alert).
    * Returns a function that stops it early.
    */
   repeat(sound: BuiltInSound, settings: SoundSettings, timing: { interval: number; duration: number }): () => void;
 }
 
-export function createSoundPlayer(output: SoundOutput = createWebAudioOutput()): SoundPlayer {
+/** `now` is the clock `repeat` measures its duration with (injectable for tests). */
+export function createSoundPlayer(output: SoundOutput = createWebAudioOutput(), now: () => number = Date.now): SoundPlayer {
   function play(sound: BuiltInSound, { enabled, volume, url }: SoundSettings) {
     if (!enabled || volume <= 0) return;
     try {
@@ -59,11 +60,11 @@ export function createSoundPlayer(output: SoundOutput = createWebAudioOutput()):
   return {
     play,
     repeat(sound, settings, { interval, duration }) {
-      let elapsed = 0;
+      // Measured by the clock, not by counting ticks: background tabs fire intervals late.
+      const start = now();
       play(sound, settings);
       const id = setInterval(() => {
-        elapsed += interval;
-        if (elapsed >= duration) return clearInterval(id);
+        if (now() - start >= duration) return clearInterval(id);
         play(sound, settings);
       }, interval);
       return () => clearInterval(id);

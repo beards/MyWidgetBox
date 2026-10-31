@@ -53,6 +53,17 @@ describe('sound player', () => {
     expect(played).toHaveLength(3);
   });
 
+  it('ends a repetition by the clock, also when intervals fire late (throttled background tab)', () => {
+    const { output, played } = createRecordingOutput();
+    let clock = 0;
+    createSoundPlayer(output, () => clock).repeat('alert', soundDefaults, { interval: 1000, duration: 3000 });
+    // The tab was throttled: the first interval only runs once the duration has passed.
+    clock = 5000;
+    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(10_000);
+    expect(played).toHaveLength(1);
+  });
+
   it('stops a repetition early', () => {
     const { output, played } = createRecordingOutput();
     const stop = createSoundPlayer(output).repeat('alert', soundDefaults, { interval: 1000, duration: 10_000 });
