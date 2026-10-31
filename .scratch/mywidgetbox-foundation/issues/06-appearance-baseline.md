@@ -1,10 +1,9 @@
 # 06: 外觀客製化共同基準
 
+Status: resolved
+Blocked by: 04
+
 **What to build:** 在骰子上建立共用（opt-in）的外觀設定：背景（純色／透明／圖片網址）、主要物件顏色（骰子本體與點數）、字型與字級、整體縮放。外觀屬於 Settings，隨 Preset 與 Share link 一起保存與分享。
-
-**Blocked by:** 04
-
-**Status:** resolved
 
 - [x] 背景可選純色、透明、圖片網址
 - [x] 骰子本體與點數顏色、字型、字級、整體縮放可調並即時預覽

@@ -1,10 +1,9 @@
 # 01: 骰子 1d6 tracer bullet（骨架到部署）
 
+Status: resolved
+Blocked by: None (can start immediately)
+
 **What to build:** 建立專案骨架（Vite 多頁、TypeScript、Vitest、lint），根網址目錄頁與 `/dice/`。骰子的 headless controller 接受注入 env（亂數來源、時鐘、儲存、URL），在動畫前決定 1d6 的 Outcome；畫面層以最簡 2D 顯示結果。CI 在 push main 時跑 typecheck + lint + test，通過才部署到 GitHub Pages。這張建立整個 repo 後續沿用的 controller + env 接縫模式。
-
-**Blocked by:** None (can start immediately)
-
-**Status:** resolved
 
 - [x] `git init` 並建立公開 GitHub repo、MIT 授權（建立公開 repo 前先向使用者確認）
 - [x] 根網址目錄頁列出骰子並可點進 `/dice/`

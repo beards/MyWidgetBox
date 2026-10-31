@@ -1,10 +1,9 @@
 # 09: 音效
 
+Status: resolved
+Blocked by: 03
+
 **What to build:** 建立共用（opt-in）的音效模組：開關、音量、音效來源可填網址。先做骰子落地音效。音效設定屬於 Settings。
-
-**Blocked by:** 03
-
-**Status:** resolved
 
 - [x] 骰子落地時播放音效，與 3D 動畫同步（聽感需手動驗證）
 - [x] 可開關、可調音量，可填入自訂音效網址

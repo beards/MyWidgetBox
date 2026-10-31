@@ -1,10 +1,9 @@
 # 11: 轉盤「抽中後移除」與 State
 
+Status: resolved
+Blocked by: 10, 09
+
 **What to build:** 可開關「抽中後移除」：中獎選項從下一輪排除；已抽掉的選項為 State，重新整理後保留、不進 Share link，有重置鈕。全部抽完時 spin 不可用並提示重置。選項清單變更時調和 State。加入轉動時的「喀喀」音效。
-
-**Blocked by:** 10, 09
-
-**Status:** resolved
 
 - [x] 開啟後抽中的選項不再被抽中且在畫面上標示
 - [x] 重新整理後已抽掉的選項仍在；重置鈕恢復完整清單

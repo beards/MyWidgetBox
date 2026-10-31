@@ -1,10 +1,9 @@
 # 14: 計時器時間到提示與 Wake Lock
 
+Status: resolved
+Blocked by: 12, 09
+
 **What to build:** 時間到時播放提示音（數秒後停止）並顯示畫面效果，持續到使用者停止或指定秒數後。手機上計時執行中使用 Wake Lock 保持螢幕亮著，不支援時略過。提示音與效果時長屬於 Settings。
-
-**Blocked by:** 12, 09
-
-**Status:** resolved
 
 - [x] 時間到提示音播放設定秒數後停止，可用自訂音效網址
 - [x] 畫面效果持續到停止或設定秒數

@@ -1,10 +1,9 @@
 # 04: Settings 持久化與 Preset
 
+Status: resolved
+Blocked by: 02
+
 **What to build:** 建立共用（opt-in）的 Settings 流程：薄儲存介面、帶 schema 版本號的 Settings、逐版遷移、載入優先序 URL > 儲存 > 預設，任何一層損壞就落到下一層。骰子的 Settings 重新整理後仍在；可新增、切換、重新命名、刪除具名 Preset。
-
-**Blocked by:** 02
-
-**Status:** resolved
 
 - [x] 骰子 Settings（骰組、修正值、動畫長度等）重新整理後保留（骰組、修正值；動畫長度由 03 加入 `DiceSettings` 後自動保存）
 - [x] Preset 可新增／切換／重新命名／刪除，目前選中的 Preset 會被記住

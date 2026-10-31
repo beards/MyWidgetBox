@@ -1,10 +1,9 @@
 # 05: Share link 與 Display mode
 
+Status: resolved
+Blocked by: 04
+
 **What to build:** 一鍵複製 Share link：把目前 Preset 的 Settings 編碼進 URL，可附 Display mode（隱藏控制介面）與透明背景。以 Share link 開啟時 Settings 只在記憶體生效，使用者明確選擇才寫入儲存。以骰子驗證，並實際貼進 OBS 測試。
-
-**Blocked by:** 04
-
-**Status:** resolved
 
 - [x] 「複製 Share link」按鈕，可勾選是否含 Display mode / 透明背景
 - [x] Display mode 下控制介面完全隱藏，仍可用 `Space` / 點擊觸發

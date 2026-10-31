@@ -1,10 +1,9 @@
 # 15: 搖手機擲骰
 
+Status: resolved
+Blocked by: 03
+
 **What to build:** 手機上可選開啟「搖手機擲骰」（預設關）。在 iOS 上需使用者觸發授權 `DeviceMotion`；不支援或拒絕授權時優雅降級。
-
-**Blocked by:** 03
-
-**Status:** resolved
 
 - [x] 設定中可開啟，預設關閉
 - [ ] 開啟後搖動手機觸發擲骰，動畫中搖動被忽略 (logic tested; device feel needs manual verification)

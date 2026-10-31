@@ -1,10 +1,9 @@
 # 10: 轉盤核心
 
+Status: resolved
+Blocked by: 05, 06, 07
+
 **What to build:** 新增 `/wheel/`。使用者自由輸入文字選項並設定權重與顏色，扇區大小與權重成正比。controller 在動畫前以權重決定 Outcome，轉動動畫讓指針停在中獎扇區，中獎選項放大彈出（數秒或點擊後消失），控制介面顯示最近 20 筆。沿用 Settings / Preset / Share link / Display mode / 外觀 / i18n。
-
-**Blocked by:** 05, 06, 07
-
-**Status:** resolved
 
 - [x] 選項清單可新增／編輯／刪除，權重為正數，各扇區顏色可自訂
 - [x] 扇區角度與權重成正比
