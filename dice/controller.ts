@@ -64,6 +64,10 @@ export interface DiceController {
   renamePreset(id: string, name: string): void;
   /** The last remaining Preset cannot be deleted. */
   deletePreset(id: string): void;
+  /** JSON backup of every Preset. */
+  exportSettings(): string;
+  /** Replaces all Presets from an export file; returns false and changes nothing if it is invalid. */
+  importSettings(text: string): boolean;
 }
 
 export const MAX_DICE_PER_KIND = 99;
@@ -165,6 +169,12 @@ export function createDiceController(env: Env, settingsOptions?: SettingsStoreOp
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
     deletePreset: (id) => changeSettings(() => settings.deletePreset(id)),
+    exportSettings: () => settings.exportFile(),
+    importSettings(text) {
+      if (!settings.importFile(text)) return false;
+      update(fromSettings());
+      return true;
+    },
   };
 }
 

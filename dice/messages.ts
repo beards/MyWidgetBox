@@ -15,7 +15,10 @@ export type DiceMessageKey =
   | 'unnamedPreset'
   | 'newPreset'
   | 'newPresetName'
-  | 'deletePreset';
+  | 'deletePreset'
+  | 'exportSettings'
+  | 'importSettings'
+  | 'importError';
 
 export const messages: MessageTables<DiceMessageKey> = {
   en: {
@@ -34,6 +37,9 @@ export const messages: MessageTables<DiceMessageKey> = {
     newPreset: 'Save as new',
     newPresetName: 'Preset {n}',
     deletePreset: 'Delete',
+    exportSettings: 'Export',
+    importSettings: 'Import',
+    importError: 'This file could not be imported. Your Settings were not changed.',
   },
   'zh-Hant': {
     title: '骰子 · MyWidgetBox',
@@ -51,5 +57,8 @@ export const messages: MessageTables<DiceMessageKey> = {
     newPreset: '另存新 Preset',
     newPresetName: 'Preset {n}',
     deletePreset: '刪除',
+    exportSettings: '匯出',
+    importSettings: '匯入',
+    importError: '無法匯入此檔案，現有 Settings 未變更。',
   },
 };

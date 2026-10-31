@@ -26,6 +26,9 @@ const presetSelect = $<HTMLSelectElement>('#preset');
 const presetName = $<HTMLInputElement>('#preset-name');
 const presetNew = $<HTMLButtonElement>('#preset-new');
 const presetDelete = $<HTMLButtonElement>('#preset-delete');
+const settingsExport = $<HTMLButtonElement>('#settings-export');
+const settingsImport = $<HTMLInputElement>('#settings-import');
+const importError = $('#settings-import-error');
 
 function renderAddSides() {
   const selected = addSides.value || '20';
@@ -108,3 +111,16 @@ presetDelete.addEventListener('click', () => {
   if (id) dice.deletePreset(id);
 });
 modifierInput.addEventListener('change', () => edit(() => dice.setModifier(Number(modifierInput.value))));
+settingsExport.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));
+  link.download = 'mywidgetbox-dice-settings.json';
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+settingsImport.addEventListener('change', async () => {
+  const file = settingsImport.files?.[0];
+  if (!file) return;
+  importError.textContent = dice.importSettings(await file.text()) ? '' : t('importError');
+  settingsImport.value = '';
+});
