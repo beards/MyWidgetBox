@@ -7,10 +7,18 @@ import {
   createSettingsStore,
   serializeSettings,
 } from '../shared/settings';
-import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
+import {
+  type ShareLinkOptions,
+  createShareLink,
+  readDisplayOptions,
+  readShareLinkSettings,
+} from '../shared/share-link';
 
-export const TIMER_MODES = ['countdown', 'stopwatch'] as const;
-/** `countdown`: counts a duration down to zero; `stopwatch`: counts up from zero. */
+export const TIMER_MODES = ['countdown', 'targetTime', 'stopwatch'] as const;
+/**
+ * `countdown`: counts a duration down to zero; `targetTime`: counts down to a time of day
+ * (follows the clock, no start/pause, see targetDeadline); `stopwatch`: counts up from zero.
+ */
 export type TimerMode = (typeof TIMER_MODES)[number];
 
 /** One timer as the user set it up; part of the Settings. */
@@ -22,12 +30,16 @@ export interface TimerConfig {
   mode: TimerMode;
   /** Countdown length in ms (whole seconds, MIN_DURATION..MAX_DURATION); kept while in stopwatch mode. */
   duration: number;
+  /** Local time of day `HH:MM` (24 h) for `targetTime` mode; kept in the other modes. */
+  target: string;
 }
 
 /** What the timer remembers and shares; one value per Preset. */
 export interface TimerSettings {
   /** The timers on the page, in display order; always at least one. */
   timers: TimerConfig[];
+  /** Show hundredths of a second on every timer. */
+  showFraction: boolean;
   appearance: Appearance;
 }
 
@@ -51,6 +63,7 @@ export interface TimerView extends TimerConfig {
 
 export interface TimerState {
   timers: TimerView[];
+  showFraction: boolean;
   appearance: Appearance;
   presets: PresetSummary[];
   /** null while Settings opened from a Share link are in effect and not saved. */
@@ -63,22 +76,50 @@ export interface TimerReading {
   status: TimerStatus;
 }
 
+/** URL parameter naming the one timer (by id) that Display mode shows. */
+export const ONLY_TIMER_PARAM = 'timer';
+
+export interface TimerShareLinkOptions extends ShareLinkOptions {
+  /** Id of the only timer to show in Display mode; all timers when omitted. */
+  timer?: string;
+}
+
+/**
+ * The timers the page shows: in Display mode with `?timer=<id>` naming an existing timer,
+ * only that one; otherwise all of them.
+ */
+export function visibleTimers<T extends { id: string }>(timers: T[], url: URL): T[] {
+  const only = url.searchParams.get(ONLY_TIMER_PARAM);
+  if (!readDisplayOptions(url).display || only === null) return timers;
+  const match = timers.filter((timer) => timer.id === only);
+  return match.length > 0 ? match : timers;
+}
+
 export interface TimerController {
   getState(): TimerState;
   /** Calls listener after every state change (not on clock ticks); returns an unsubscribe function. */
   subscribe(listener: (state: TimerState) => void): () => void;
-  /** Starts or resumes; ignored while running or when the countdown is up. */
+  /** Starts or resumes; ignored while running, when the countdown is up, and in `targetTime` mode. */
   start(id: string): void;
-  /** Ignored unless running and not yet up. */
+  /** Ignored unless running and not yet up, and in `targetTime` mode. */
   pause(id: string): void;
-  /** Back to zero (a countdown back to its full duration), not running. */
+  /** Back to zero (a countdown back to its full duration), not running; ignored in `targetTime` mode. */
   reset(id: string): void;
   /** Switching mode resets the timer. */
   setMode(id: string, mode: TimerMode): void;
   /** Sets the countdown length (resets the timer); invalid values are ignored. */
   setDuration(id: string, ms: number): void;
+  /** Sets the `targetTime` time of day (`HH:MM`, 24 h); invalid values are ignored. */
+  setTarget(id: string, target: string): void;
+  /** Appends a new idle timer (default Settings) and returns its id. */
+  addTimer(): string;
+  /** Removes a timer; the last remaining one cannot be removed. */
+  removeTimer(id: string): void;
+  /** Sets a timer's name (may be empty); keeps its run. */
+  renameTimer(id: string, name: string): void;
   /** Replaces the appearance (applied live); invalid appearances are ignored. */
   setAppearance(appearance: Appearance): void;
+  setShowFraction(on: boolean): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
   selectPreset(id: string): void;
@@ -86,7 +127,7 @@ export interface TimerController {
   /** The last remaining Preset cannot be deleted. */
   deletePreset(id: string): void;
   /** A Share link to this page carrying the Settings in effect (never the State). */
-  shareLink(options?: ShareLinkOptions): string;
+  shareLink(options?: TimerShareLinkOptions): string;
   exportSettings(): string;
   importSettings(text: string): boolean;
 }
@@ -99,17 +140,37 @@ export const MAX_DURATION = (99 * 3600 + 59 * 60 + 59) * 1000;
 export const TIMER_STATE_KEY = 'mywidgetbox:timer:state';
 const STATE_VERSION = 1;
 
+/**
+ * How long a `targetTime` timer stays time up after its target before counting down to the
+ * next day's occurrence. Stateless on purpose: an OBS source opened (or reloaded) any day
+ * shows the right thing without anyone pressing start.
+ */
+export const TARGET_TIME_UP_SPAN = 60 * 60 * 1000;
+const DEFAULT_TARGET = '21:00';
+
 export const timerSettingsSchema: SettingsSchema<TimerSettings> = {
   namespace: 'timer',
-  version: 1,
+  version: 2,
   // Note: fields inside `timers` entries are not filled from defaults (arrays are taken
   // whole), so adding a field to TimerConfig needs a version bump and a Migration.
   defaults: {
-    timers: [{ id: '1', name: '', mode: 'countdown', duration: 5 * 60 * 1000 }],
+    timers: [{ id: '1', name: '', mode: 'countdown', duration: 5 * 60 * 1000, target: DEFAULT_TARGET }],
+    showFraction: false,
     appearance: { ...appearanceDefaults, fontSize: 96 },
   },
+  migrations: {
+    // Ticket 13 added `target` to every timer.
+    1: (settings) => ({
+      ...settings,
+      timers: Array.isArray(settings.timers)
+        ? settings.timers.map((timer: unknown) => (isRecord(timer) ? { target: DEFAULT_TARGET, ...timer } : timer))
+        : settings.timers,
+    }),
+  },
   isValid: (settings): settings is TimerSettings =>
-    isTimerList((settings as TimerSettings).timers) && isAppearance((settings as TimerSettings).appearance),
+    isTimerList((settings as TimerSettings).timers) &&
+    typeof (settings as TimerSettings).showFraction === 'boolean' &&
+    isAppearance((settings as TimerSettings).appearance),
 };
 
 function isValidDuration(ms: unknown): ms is number {
@@ -127,15 +188,40 @@ function isTimerList(value: unknown): value is TimerConfig[] {
         timer.id !== '' &&
         typeof timer.name === 'string' &&
         TIMER_MODES.includes(timer.mode) &&
-        isValidDuration(timer.duration),
+        isValidDuration(timer.duration) &&
+        isValidTarget(timer.target),
     )
   );
+}
+
+function isValidTarget(value: unknown): value is string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+/**
+ * The moment a `targetTime` timer counts down to at `now`: the first local occurrence of
+ * `target` later than TARGET_TIME_UP_SPAN before now. So a target that passed less than that
+ * span ago shows time up; an earlier one means the next day (local time, DST-aware).
+ */
+export function targetDeadline(target: string, now: number): number {
+  const [hours, minutes] = target.split(':').map(Number);
+  const day = new Date(now);
+  for (const offset of [-1, 0, 1]) {
+    const candidate = new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset, hours, minutes).getTime();
+    if (candidate > now - TARGET_TIME_UP_SPAN) return candidate;
+  }
+  // Unreachable: tomorrow's occurrence is always later than now - span.
+  return now;
 }
 
 const IDLE: TimerRun = { startedAt: null, elapsed: 0 };
 
 /** The value to show and the status of a timer at time `now` (pass env.now()). */
-export function readTimer({ mode, duration, run }: TimerView, now: number): TimerReading {
+export function readTimer({ mode, duration, target, run }: TimerView, now: number): TimerReading {
+  if (mode === 'targetTime') {
+    const remaining = targetDeadline(target, now) - now;
+    return remaining > 0 ? { value: remaining, status: 'running' } : { value: 0, status: 'timeUp' };
+  }
   const running = run.startedAt !== null;
   // A clock set backwards must not run the timer backwards.
   const elapsed = run.elapsed + (running ? Math.max(0, now - run.startedAt!) : 0);
@@ -148,13 +234,17 @@ export function readTimer({ mode, duration, run }: TimerView, now: number): Time
  * The value of a timer at time `now`: `mm:ss` below an hour, `hh:mm:ss` from an hour on.
  * A countdown rounds up (it shows 00:00 only once time is up), a stopwatch rounds down.
  */
-export function formatTimer(timer: TimerView, now: number): string {
+export function formatTimer(timer: TimerView, now: number, options: { showFraction?: boolean } = {}): string {
   const { value } = readTimer(timer, now);
-  const total = timer.mode === 'countdown' ? Math.ceil(value / 1000) : Math.floor(value / 1000);
+  // Rounded in the unit of the last digit shown: seconds, or hundredths with showFraction.
+  const unit = options.showFraction ? 10 : 1000;
+  const units = timer.mode !== 'stopwatch' ? Math.ceil(value / unit) : Math.floor(value / unit);
+  const total = Math.floor((units * unit) / 1000);
   const pad = (n: number) => String(n).padStart(2, '0');
   const hours = Math.floor(total / 3600);
   const rest = `${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
-  return hours > 0 ? `${pad(hours)}:${rest}` : rest;
+  const fraction = options.showFraction ? `.${pad(units % 100)}` : '';
+  return (hours > 0 ? `${pad(hours)}:${rest}` : rest) + fraction;
 }
 
 /**
@@ -196,6 +286,7 @@ export function createTimerController(
     const { settings: current, presets, selectedPresetId } = settings.getSnapshot();
     return {
       timers: current.timers.map((timer) => ({ ...timer, run: runs[timer.id] ?? IDLE })),
+      showFraction: current.showFraction,
       appearance: current.appearance,
       presets,
       selectedPresetId,
@@ -213,7 +304,8 @@ export function createTimerController(
     publish();
   }
 
-  const find = (id: string) => state.timers.find((timer) => timer.id === id);
+  /** A timer that start/pause/reset apply to (`targetTime` timers follow the clock instead). */
+  const find = (id: string) => state.timers.find((timer) => timer.id === id && timer.mode !== 'targetTime');
 
   function changeSettings(action: () => void) {
     action();
@@ -257,16 +349,50 @@ export function createTimerController(
     setDuration(id, ms) {
       if (isValidDuration(ms)) editTimer(id, { duration: ms });
     },
+    setTarget(id, target) {
+      if (isValidTarget(target)) editTimer(id, { target });
+    },
+    addTimer() {
+      const current = settings.getSnapshot().settings;
+      // Also skip ids with a stored run (a removed timer, or one in another Preset), so a new
+      // timer never picks up someone else's progress.
+      const used = [...current.timers.map((entry) => entry.id), ...Object.keys(runs)];
+      const id = String(Math.max(0, ...used.map(Number).filter(Number.isInteger)) + 1);
+      const template = timerSettingsSchema.defaults.timers[0]!;
+      settings.update({ ...current, timers: [...current.timers, { ...template, id }] });
+      setRun(id, IDLE);
+      return id;
+    },
+    removeTimer(id) {
+      const current = settings.getSnapshot().settings;
+      if (current.timers.length <= 1 || !current.timers.some((entry) => entry.id === id)) return;
+      changeSettings(() => settings.update({ ...current, timers: current.timers.filter((entry) => entry.id !== id) }));
+    },
+    renameTimer(id, name) {
+      const current = settings.getSnapshot().settings;
+      if (typeof name !== 'string' || !current.timers.some((entry) => entry.id === id)) return;
+      const timers = current.timers.map((entry) => (entry.id === id ? { ...entry, name } : entry));
+      changeSettings(() => settings.update({ ...current, timers }));
+    },
     setAppearance(appearance) {
       if (!isAppearance(appearance)) return;
       changeSettings(() => settings.update({ ...settings.getSnapshot().settings, appearance }));
+    },
+    setShowFraction(on) {
+      if (typeof on !== 'boolean') return;
+      changeSettings(() => settings.update({ ...settings.getSnapshot().settings, showFraction: on }));
     },
     createPreset: (name) => changeSettings(() => settings.createPreset(name)),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
     deletePreset: (id) => changeSettings(() => settings.deletePreset(id)),
-    shareLink: (options) =>
-      createShareLink(env.url, serializeSettings(timerSettingsSchema, settings.getSnapshot().settings), options),
+    shareLink({ timer: only, ...options } = {}) {
+      const link = new URL(
+        createShareLink(env.url, serializeSettings(timerSettingsSchema, settings.getSnapshot().settings), options),
+      );
+      if (only) link.searchParams.set(ONLY_TIMER_PARAM, only);
+      return link.href;
+    },
     exportSettings: () => settings.exportFile(),
     importSettings(text) {
       if (!settings.importFile(text)) return false;
