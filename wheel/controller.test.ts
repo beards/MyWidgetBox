@@ -15,6 +15,7 @@ import {
   createWheelController,
   sectorsFor,
 } from './controller';
+import { landingAngle } from './geometry';
 
 /** The uint32 value that maps to the fraction `f` of the random range. */
 const at = (f: number) => Math.floor(f * 2 ** 32);
@@ -47,22 +48,23 @@ describe('wheel controller', () => {
 
     wheel.spin();
     // Weights 1 + 1 + 2: 0.6 of the total weight falls in Ramen, whose sector is 180°–360°;
-    // the pointer lands in the middle of the sector's inner 80%.
-    expect(wheel.getState().outcome).toEqual({ entryId: ramen.id, label: 'Ramen', color: ramen.color, angle: 270 });
+    // the second draw places the pointer in it.
+    const angle = landingAngle({ start: 180, end: 360 }, 0.5);
+    expect(wheel.getState().outcome).toEqual({ entryId: ramen.id, label: 'Ramen', color: ramen.color, angle });
   });
 
-  it('lands the pointer inside the winning sector, away from its borders', () => {
+  it('lands the pointer inside the winning sector, never on its borders', () => {
     const wheel = wheelWith(createTestEnv({ random: [0, 0, 2 ** 32 - 1, 2 ** 32 - 1] }), [
       { label: 'Small', weight: 1 },
       { label: 'Big', weight: 3 },
     ]);
 
     spinAndFinish(wheel);
-    // Small spans 0°–90°; its inner 80% starts at 9°.
+    // Small spans 0°–90°; the lowest draw stops just short of its start border.
     expect(wheel.getState().outcome!.label).toBe('Small');
-    expect(wheel.getState().outcome!.angle).toBeCloseTo(9, 6);
+    expect(wheel.getState().outcome!.angle).toBeCloseTo(0.4, 6);
     wheel.spin();
-    // Big spans 90°–360°; its inner 80% ends at 333°.
+    // Big spans 90°–360°; the highest draw lands anywhere: the top of its inner 80%, 333°.
     expect(wheel.getState().outcome!.label).toBe('Big');
     expect(wheel.getState().outcome!.angle).toBeCloseTo(333, 2);
   });

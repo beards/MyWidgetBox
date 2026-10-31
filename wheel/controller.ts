@@ -19,6 +19,7 @@ import {
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
 import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
+import { landingAngle } from './geometry';
 
 // Part of this controller's interface (the view and tests use them from here).
 export { type AnimationSettings, MAX_ANIMATION_DURATION, MIN_ANIMATION_DURATION, REDUCED_MOTION_DURATION, animationFor };
@@ -171,8 +172,6 @@ export const LABEL_DIRECTIONS = ['across', 'along'] as const;
 export type LabelDirection = (typeof LABEL_DIRECTIONS)[number];
 export const LABEL_SIZE_LIMIT_MIN = 4;
 export const LABEL_SIZE_LIMIT_MAX = 40;
-/** The pointer lands in this inner fraction of the winning sector, never right on a border. */
-const LANDING_FRACTION = 0.8;
 
 /** Colors given to new entries in turn (white labels stay readable on all of them). */
 export const PALETTE = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#469990', '#9a6324', '#808000'];
@@ -403,8 +402,7 @@ export function createWheelController(
       const sectors = sectorsFor(state.remainingEntries);
       const target = fraction(env.randomUint32) * 360;
       const { entry, start, end } = sectors.find((sector) => target < sector.end) ?? sectors.at(-1)!;
-      const margin = (1 - LANDING_FRACTION) / 2;
-      const angle = start + (end - start) * (margin + LANDING_FRACTION * fraction(env.randomUint32));
+      const angle = landingAngle({ start, end }, fraction(env.randomUint32));
       const outcome = { entryId: entry.id, label: entry.label, color: entry.color, angle };
       update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT), animating: true });
     },

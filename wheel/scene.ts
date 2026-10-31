@@ -1,6 +1,6 @@
 // SVG view of the wheel: crisp at any zoom (OBS scaling) and cheap to redraw. No controller import.
 import { type WheelEntry, sectorsFor } from './controller';
-import { easeOut, fitLabel, type LabelDirection, landingRotation, MAX_LABEL_SIZE, sectorUnderPointer } from './geometry';
+import { fitLabel, type LabelDirection, landingRotation, MAX_LABEL_SIZE, sectorUnderPointer, spinProgress } from './geometry';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RADIUS = 100;
@@ -164,7 +164,7 @@ export function createWheelScene(container: HTMLElement): WheelScene {
       let sector = sectorUnderPointer(parts, rotation);
       const step = (now: number) => {
         const t = Math.min(1, (now - startTime) / duration);
-        rotation = from + (to - from) * easeOut(t);
+        rotation = from + (to - from) * spinProgress(t);
         applyRotation();
         const next = sectorUnderPointer(parts, rotation);
         if (next !== sector && parts.length > 1) onTick?.();

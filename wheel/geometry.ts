@@ -11,9 +11,52 @@ export function landingRotation(from: number, angle: number, turns: number): num
   return from + turns * 360 + mod(-angle - from);
 }
 
-/** Quartic ease-out: a long, slow finish, like a real wheel coasting to a stop. */
-export function easeOut(t: number): number {
-  return 1 - (1 - t) ** 4;
+/** Chance that the wheel stops just short of the border it is about to cross. */
+const NEAR_NEXT_BORDER = 0.45;
+/** Chance that it stops just past the border it has crossed (otherwise: anywhere). */
+const NEAR_LAST_BORDER = 0.3;
+/** Closest and farthest distance (degrees) from a border when stopping near one. */
+const BORDER_GAP = { min: 0.4, max: 10 };
+
+/**
+ * Where the pointer stops in the winning sector (wheel angle, degrees), from a uniform draw
+ * `u` in [0, 1). Which entry wins is decided before, so this only sets the suspense: often
+ * just short of the next border (the wheel turns clockwise, so the pointer moves towards
+ * `start`), sometimes just past the last one, otherwise anywhere in the inner 80%. Never on a
+ * border: gaps shrink with tiny sectors.
+ */
+export function landingAngle({ start, end }: { start: number; end: number }, u: number): number {
+  const span = end - start;
+  const gap = (v: number) => {
+    const min = Math.min(BORDER_GAP.min, span * 0.1);
+    const max = Math.min(BORDER_GAP.max, span * 0.25);
+    return min + (max - min) * v;
+  };
+  if (u < NEAR_NEXT_BORDER) return start + gap(u / NEAR_NEXT_BORDER);
+  const anywhere = NEAR_NEXT_BORDER + NEAR_LAST_BORDER;
+  if (u < anywhere) return end - gap((u - NEAR_NEXT_BORDER) / NEAR_LAST_BORDER);
+  return start + span * (0.1 + 0.8 * ((u - anywhere) / (1 - anywhere)));
+}
+
+/** Share of the spin time taken by the fast slowdown; the rest is the slow coast. */
+const SLOWDOWN_TIME = 0.35;
+/** Speed at the start of the coast, as a share of the starting speed. */
+const COAST_SPEED = 0.06;
+
+/**
+ * Share of the turning done after share `t` of the spin time (both 0..1). The wheel slows down
+ * quickly to a crawl (speed falling from 1 to COAST_SPEED over SLOWDOWN_TIME), then coasts slowly,
+ * slowing down evenly, until it stops: the last sectors pass one by one for most of the spin.
+ */
+export function spinProgress(t: number): number {
+  const p = SLOWDOWN_TIME;
+  const c = COAST_SPEED;
+  // Speed in the slowdown: c + (1 - c)(1 - t/p)^2; in the coast: c(1 - s), s = (t - p)/(1 - p).
+  const slowdown = (u: number) => c * u + ((1 - c) * p * (1 - (1 - u / p) ** 3)) / 3;
+  const coast = (s: number) => c * (1 - p) * (s - (s * s) / 2);
+  const total = slowdown(p) + coast(1);
+  const done = t <= p ? slowdown(Math.max(0, t)) : slowdown(p) + coast(Math.min(1, (t - p) / (1 - p)));
+  return done / total;
 }
 
 /**

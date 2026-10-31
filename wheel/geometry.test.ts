@@ -1,8 +1,63 @@
 import { describe, expect, it } from 'vitest';
-import { fitLabel, type LabelFit, landingRotation, MAX_LABEL_SIZE, MIN_LABEL_SIZE, sectorUnderPointer } from './geometry';
+import { fitLabel, type LabelFit, landingRotation, MAX_LABEL_SIZE, MIN_LABEL_SIZE, landingAngle, sectorUnderPointer, spinProgress } from './geometry';
 
 /** The wheel angle under the top pointer once the wheel is rotated clockwise by `rotation` degrees. */
 const underPointer = (rotation: number) => (((-rotation % 360) + 360) % 360);
+
+describe('spinProgress', () => {
+  const speed = (t: number) => (spinProgress(t + 1e-4) - spinProgress(t)) / 1e-4;
+
+  it('starts at the start, ends at the end and never turns back', () => {
+    expect(spinProgress(0)).toBe(0);
+    expect(spinProgress(1)).toBeCloseTo(1, 10);
+    for (let t = 0; t < 1; t += 0.01) expect(spinProgress(t + 0.01)).toBeGreaterThanOrEqual(spinProgress(t));
+  });
+
+  it('slows down quickly: most of the turning is done in the first third', () => {
+    expect(spinProgress(1 / 3)).toBeGreaterThan(0.8);
+    expect(speed(1 / 3)).toBeLessThan(speed(0) / 10);
+  });
+
+  it('then coasts slowly for a long time before it stops', () => {
+    // Still visibly turning halfway through and at three quarters, slower and slower.
+    expect(speed(0.5)).toBeGreaterThan(speed(0) / 40);
+    expect(speed(0.75)).toBeGreaterThan(speed(0) / 100);
+    expect(speed(0.75)).toBeLessThan(speed(0.5));
+    expect(speed(0.9999)).toBeLessThan(speed(0) / 1000);
+  });
+});
+
+describe('landingAngle', () => {
+  const draws = Array.from({ length: 1000 }, (_, i) => (i + 0.5) / 1000);
+  const share = (sector: { start: number; end: number }, test: (angle: number) => boolean) =>
+    draws.filter((u) => test(landingAngle(sector, u))).length / draws.length;
+
+  it.each([
+    [0, 60],
+    [100, 101],
+    [10, 350],
+  ])('always lands strictly inside the sector %f°–%f°', (start, end) => {
+    for (const u of [0, ...draws, 1 - 2 ** -32]) {
+      const angle = landingAngle({ start, end }, u);
+      expect(angle).toBeGreaterThan(start);
+      expect(angle).toBeLessThan(end);
+    }
+  });
+
+  it('mostly stops just short of the border the wheel is about to cross', () => {
+    // The wheel turns clockwise, so the pointer moves towards lower angles: the next border is `start`.
+    expect(share({ start: 0, end: 60 }, (angle) => angle < 10)).toBeGreaterThan(0.4);
+  });
+
+  it('sometimes stops just past the other border, and otherwise anywhere', () => {
+    expect(share({ start: 0, end: 60 }, (angle) => angle > 50)).toBeGreaterThan(0.25);
+    expect(share({ start: 0, end: 60 }, (angle) => angle > 10 && angle < 50)).toBeGreaterThan(0.15);
+  });
+
+  it('keeps away from the borders within a tiny sector too', () => {
+    expect(share({ start: 100, end: 101 }, (angle) => angle < 100.05 || angle > 100.95)).toBe(0);
+  });
+});
 
 describe('landingRotation', () => {
   it.each([
