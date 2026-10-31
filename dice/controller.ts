@@ -1,3 +1,4 @@
+import { type Appearance, appearanceDefaults, isAppearance, isHexColor } from '../shared/appearance';
 import type { Env } from '../shared/env';
 import { randomBelow } from '../shared/random';
 import { type PresetSummary, type SettingsSchema, type SettingsStoreOptions, createSettingsStore } from '../shared/settings';
@@ -29,14 +30,25 @@ export interface DiceOutcome {
   total: number;
 }
 
+/** The shared appearance baseline plus the dice's own items (also used by the 3D view). */
+export interface DiceAppearance extends Appearance {
+  /** `#rrggbb` color of the die body. */
+  dieColor: string;
+  /** `#rrggbb` color of the pips / face numbers. */
+  pipColor: string;
+}
+
 /** What the dice remember and share; one value per Preset. Add new fields with defaults here. */
 export interface DiceSettings {
   diceSet: DiceSet;
+  appearance: DiceAppearance;
 }
 
 export interface DiceState {
   /** The dice set of the Settings in effect. */
   diceSet: DiceSet;
+  /** The appearance of the Settings in effect. */
+  appearance: DiceAppearance;
   presets: PresetSummary[];
   /** null while Settings opened from a Share link are in effect and not saved. */
   selectedPresetId: string | null;
@@ -57,6 +69,8 @@ export interface DiceController {
   setCount(sides: DieSides, count: number): void;
   /** Sets the fixed integer added to every total; non-integers are ignored. */
   setModifier(modifier: number): void;
+  /** Replaces the appearance (applied live); invalid appearances are ignored. */
+  setAppearance(appearance: DiceAppearance): void;
   roll(): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
@@ -72,9 +86,17 @@ export const HISTORY_LIMIT = 20;
 export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
   namespace: 'dice',
   version: 1,
-  defaults: { diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 } },
-  isValid: (settings): settings is DiceSettings => isDiceSet((settings as DiceSettings).diceSet),
+  defaults: {
+    diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
+    appearance: { ...appearanceDefaults, dieColor: '#ffffff', pipColor: '#222222' },
+  },
+  isValid: (settings): settings is DiceSettings =>
+    isDiceSet((settings as DiceSettings).diceSet) && isDiceAppearance((settings as DiceSettings).appearance),
 };
+
+function isDiceAppearance(value: unknown): value is DiceAppearance {
+  return isAppearance(value) && isHexColor((value as DiceAppearance).dieColor) && isHexColor((value as DiceAppearance).pipColor);
+}
 
 function isDiceSet(value: unknown): value is DiceSet {
   const { groups, modifier } = (value ?? {}) as Partial<DiceSet>;
@@ -101,7 +123,7 @@ export function createDiceController(env: Env, settingsOptions?: SettingsStoreOp
 
   function fromSettings() {
     const { settings: current, presets, selectedPresetId } = settings.getSnapshot();
-    return { diceSet: current.diceSet, presets, selectedPresetId };
+    return { diceSet: current.diceSet, appearance: current.appearance, presets, selectedPresetId };
   }
 
   function update(next: Partial<DiceState>) {
@@ -151,6 +173,10 @@ export function createDiceController(env: Env, settingsOptions?: SettingsStoreOp
     setModifier(modifier) {
       if (!Number.isSafeInteger(modifier)) return;
       setDiceSet({ ...state.diceSet, modifier });
+    },
+    setAppearance(appearance) {
+      if (!isDiceAppearance(appearance)) return;
+      changeSettings(() => settings.update({ ...settings.getSnapshot().settings, appearance }));
     },
     roll() {
       const { groups, modifier } = state.diceSet;

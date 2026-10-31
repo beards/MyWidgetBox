@@ -13,14 +13,24 @@ body {
   gap: 1.5rem;
 }
 
+/* Font and scale come from the appearance Settings (applied inline); sizes follow them in em. */
+.dice__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 .dice__die {
-  width: 8rem;
-  height: 8rem;
-  border: 3px solid currentColor;
-  border-radius: 1rem;
-  background: #fff;
-  color: #222;
-  font-size: 4rem;
+  /* 3.2em of the 20px default text size = the original 4rem. */
+  font-size: 3.2em;
+  font-family: inherit;
+  width: 2em;
+  height: 2em;
+  border: 3px solid var(--pip-color, #222);
+  border-radius: 0.25em;
+  background: var(--die-color, #fff);
+  color: var(--pip-color, #222);
   font-weight: bold;
   cursor: pointer;
 }
@@ -40,7 +50,6 @@ body {
 .dice__breakdown {
   margin: 0;
   min-height: 1.5em;
-  font-size: 1.25rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -49,6 +58,11 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   min-width: 16rem;
+  /* Keeps the controls readable over any appearance background. */
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 0.9);
+  color: #222;
 }
 
 .dice__controls h2 {
@@ -64,6 +78,7 @@ body {
 }
 
 .dice__groups li,
+.dice__appearance label,
 .dice__presets,
 .dice__add,
 .dice__modifier {
@@ -78,6 +93,29 @@ body {
 
 .dice__groups input,
 .dice__modifier input {
+  width: 4rem;
+}
+
+.dice__appearance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dice__appearance [hidden] {
+  display: none;
+}
+
+.dice__appearance label > span {
+  min-width: 7rem;
+}
+
+.dice__appearance input[type='text'],
+.dice__appearance input[type='url'] {
+  width: 12rem;
+}
+
+.dice__appearance input[type='number'] {
   width: 4rem;
 }
 

@@ -1,3 +1,4 @@
+import { type AppearanceMessageKey, appearanceMessages } from '../shared/appearance-messages';
 import type { MessageTables } from '../shared/i18n';
 
 export type DiceMessageKey =
@@ -15,10 +16,13 @@ export type DiceMessageKey =
   | 'unnamedPreset'
   | 'newPreset'
   | 'newPresetName'
-  | 'deletePreset';
+  | 'deletePreset'
+  | 'dieColor'
+  | 'pipColor';
 
-export const messages: MessageTables<DiceMessageKey> = {
+export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
   en: {
+    ...appearanceMessages.en,
     title: 'Dice · MyWidgetBox',
     roll: 'Roll',
     diceSet: 'Dice set',
@@ -34,8 +38,11 @@ export const messages: MessageTables<DiceMessageKey> = {
     newPreset: 'Save as new',
     newPresetName: 'Preset {n}',
     deletePreset: 'Delete',
+    dieColor: 'Die color',
+    pipColor: 'Pip color',
   },
   'zh-Hant': {
+    ...appearanceMessages['zh-Hant'],
     title: '骰子 · MyWidgetBox',
     roll: '擲骰',
     diceSet: '骰組',
@@ -51,5 +58,7 @@ export const messages: MessageTables<DiceMessageKey> = {
     newPreset: '另存新 Preset',
     newPresetName: 'Preset {n}',
     deletePreset: '刪除',
+    dieColor: '骰子顏色',
+    pipColor: '點數顏色',
   },
 };

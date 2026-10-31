@@ -9,8 +9,10 @@
   <body>
     <div class="dice__language" id="language"></div>
     <main class="dice">
-      <button type="button" class="dice__die" id="die" aria-live="polite" data-i18n-aria-label="roll">?</button>
-      <p class="dice__breakdown" id="breakdown"></p>
+      <div class="dice__stage" id="stage">
+        <button type="button" class="dice__die" id="die" aria-live="polite" data-i18n-aria-label="roll">?</button>
+        <p class="dice__breakdown" id="breakdown"></p>
+      </div>
       <button type="button" class="dice__roll" id="roll" data-i18n="roll"></button>
 
       <section class="dice__controls">
@@ -32,6 +34,8 @@
           <span data-i18n="modifier"></span>
           <input type="number" id="modifier" step="1" value="0" />
         </label>
+
+        <div class="dice__appearance" id="appearance"></div>
 
         <h2 data-i18n="history"></h2>
         <ol class="dice__history" id="history"></ol>
