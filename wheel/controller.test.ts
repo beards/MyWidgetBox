@@ -7,6 +7,7 @@ import {
   LABEL_SIZE_LIMIT_MIN,
   MAX_ENTRIES,
   REDUCED_MOTION_DURATION,
+  RESULT_SECONDS_MAX,
   WHEEL_STATE_KEY,
   type WheelAppearance,
   type WheelController,
@@ -205,6 +206,31 @@ describe('wheel fairness', () => {
     }, 0);
     // df = 3, p = 0.001.
     expect(chiSquare).toBeLessThan(16.266);
+  });
+});
+
+describe('wheel result pop-up', () => {
+  it('hides the result by itself after 4 seconds by default', () => {
+    expect(createWheelController(createTestEnv()).getState().result).toEqual({ autoHide: true, seconds: 4 });
+  });
+
+  it('remembers whether and when the result hides, and ignores invalid times', () => {
+    const env = createTestEnv();
+    const wheel = createWheelController(env);
+    wheel.setResult({ seconds: 12 });
+    wheel.setResult({ autoHide: false });
+    for (const seconds of [0, RESULT_SECONDS_MAX + 1, Number.NaN]) wheel.setResult({ seconds });
+    expect(wheel.getState().result).toEqual({ autoHide: false, seconds: 12 });
+    expect(createWheelController(env).getState().result).toEqual({ autoHide: false, seconds: 12 });
+  });
+
+  it('fills the defaults into Settings saved before the option existed', () => {
+    const env = createTestEnv();
+    const exported = JSON.parse(createWheelController(env).exportSettings());
+    delete exported.presets[0].settings.result;
+    const wheel = createWheelController(createTestEnv());
+    expect(wheel.importSettings(JSON.stringify(exported))).toBe(true);
+    expect(wheel.getState().result).toEqual({ autoHide: true, seconds: 4 });
   });
 });
 

@@ -62,6 +62,15 @@
           <input type="checkbox" id="remove-after-draw" />
           <span data-i18n="removeAfterDraw"></span>
         </label>
+        <label class="wheel__row">
+          <input type="checkbox" id="result-auto-hide" />
+          <span data-i18n="resultAutoHide"></span>
+        </label>
+        <label class="wheel__row" id="result-seconds-row">
+          <span data-i18n="resultSeconds"></span>
+          <input type="range" id="result-seconds" min="1" max="30" step="1" />
+          <output id="result-seconds-value" for="result-seconds"></output>
+        </label>
 
         <h2 data-i18n="sound"></h2>
         <label class="wheel__row">

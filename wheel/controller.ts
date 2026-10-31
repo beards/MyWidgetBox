@@ -77,6 +77,15 @@ export interface WheelSettings {
   removeAfterDraw: boolean;
   /** Tick played each time a sector boundary passes the pointer. */
   sound: SoundSettings;
+  result: WheelResultSettings;
+}
+
+/** The pop-up showing the Outcome: it can always be clicked away. */
+export interface WheelResultSettings {
+  /** Whether it goes away by itself; otherwise it stays until clicked or the next spin. */
+  autoHide: boolean;
+  /** How long it stays when it goes away by itself, RESULT_SECONDS_MIN..RESULT_SECONDS_MAX. */
+  seconds: number;
 }
 
 export interface WheelState {
@@ -88,6 +97,7 @@ export interface WheelState {
   removeAfterDraw: boolean;
   /** The sound Settings in effect; the view plays the tick with them. */
   sound: SoundSettings;
+  result: WheelResultSettings;
   /**
    * Ids of entries drawn since the last reset (State: kept across reloads, never in Share links),
    * oldest first, always a subset of `entries`. Only used while removeAfterDraw is on.
@@ -135,6 +145,8 @@ export interface WheelController {
   /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
   setAnimationDuration(ms: number): void;
   setAlwaysFullAnimation(always: boolean): void;
+  /** Changes when the result pop-up goes away; invalid times are ignored. */
+  setResult(next: Partial<WheelResultSettings>): void;
   /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. Nothing stays drawn; ignored while animating. */
   restoreDefaults(): void;
   /** Saves the current Settings as a new Preset (with nothing drawn yet) and switches to it; ignored while animating. */
@@ -172,6 +184,8 @@ export const LABEL_DIRECTIONS = ['across', 'along'] as const;
 export type LabelDirection = (typeof LABEL_DIRECTIONS)[number];
 export const LABEL_SIZE_LIMIT_MIN = 4;
 export const LABEL_SIZE_LIMIT_MAX = 40;
+export const RESULT_SECONDS_MIN = 1;
+export const RESULT_SECONDS_MAX = 30;
 
 /** Colors given to new entries in turn (white labels stay readable on all of them). */
 export const PALETTE = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#469990', '#9a6324', '#808000'];
@@ -193,14 +207,26 @@ export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
     animation: { duration: 5000, alwaysFull: false },
     removeAfterDraw: false,
     sound: soundDefaults,
+    result: { autoHide: true, seconds: 4 },
   },
   isValid: (settings): settings is WheelSettings =>
     isEntryList((settings as WheelSettings).entries) &&
     isWheelAppearance((settings as WheelSettings).appearance) &&
     isAnimationSettings((settings as WheelSettings).animation) &&
     typeof (settings as WheelSettings).removeAfterDraw === 'boolean' &&
-    isSoundSettings((settings as WheelSettings).sound),
+    isSoundSettings((settings as WheelSettings).sound) &&
+    isResultSettings((settings as WheelSettings).result),
 };
+
+function isResultSettings(value: unknown): value is WheelResultSettings {
+  const { autoHide, seconds } = (value ?? {}) as Partial<WheelResultSettings>;
+  return (
+    typeof autoHide === 'boolean' &&
+    typeof seconds === 'number' &&
+    seconds >= RESULT_SECONDS_MIN &&
+    seconds <= RESULT_SECONDS_MAX
+  );
+}
 
 function isWeight(weight: unknown): weight is number {
   return typeof weight === 'number' && Number.isFinite(weight) && weight > 0 && weight <= MAX_WEIGHT;
@@ -343,6 +369,7 @@ export function createWheelController(
       alwaysFullAnimation: current.animation.alwaysFull,
       removeAfterDraw,
       sound: current.sound,
+      result: current.result,
       drawnEntryIds: drawn,
       remainingEntries,
       allDrawn: remainingEntries.length === 0,
@@ -428,6 +455,10 @@ export function createWheelController(
       if (isAnimationDuration(ms)) setAnimation({ duration: ms });
     },
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
+    setResult(next) {
+      const result = { ...settings.getSnapshot().settings.result, ...next };
+      if (isResultSettings(result)) updateSettings({ result });
+    },
     restoreDefaults() {
       if (state.animating) return;
       settings.update(wheelSettingsSchema.defaults);

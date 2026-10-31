@@ -248,6 +248,7 @@ body {
   border-radius: 0.25rem;
 }
 
+.wheel__row[hidden],
 .wheel__shared[hidden] {
   display: none;
 }

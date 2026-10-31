@@ -25,9 +25,6 @@ import {
 import { messages } from './messages';
 import { createWheelScene } from './scene';
 
-/** How long the result pop-up stays before it goes away by itself. */
-const RESULT_MS = 4000;
-
 const env = createBrowserEnv();
 const displayOptions = readDisplayOptions(env.url);
 applyDisplayMode(displayOptions);
@@ -50,6 +47,10 @@ const durationInput = $<HTMLInputElement>('#duration');
 const durationValue = $<HTMLOutputElement>('#duration-value');
 const alwaysFullInput = $<HTMLInputElement>('#always-full');
 const removeAfterDrawInput = $<HTMLInputElement>('#remove-after-draw');
+const resultAutoHideInput = $<HTMLInputElement>('#result-auto-hide');
+const resultSecondsRow = $('#result-seconds-row');
+const resultSecondsInput = $<HTMLInputElement>('#result-seconds');
+const resultSecondsValue = $<HTMLOutputElement>('#result-seconds-value');
 const allDrawnNotice = $('#all-drawn');
 
 const scene = createWheelScene(stage);
@@ -101,7 +102,8 @@ function showResult(outcome: WheelOutcome) {
   void result.offsetWidth;
   result.classList.add('wheel__result--in');
   clearTimeout(resultTimer);
-  resultTimer = window.setTimeout(hideResult, RESULT_MS);
+  const { autoHide, seconds } = wheel.getState().result;
+  if (autoHide) resultTimer = window.setTimeout(hideResult, seconds * 1000);
 }
 
 function hideResult() {
@@ -157,6 +159,10 @@ function render(state: WheelState) {
   durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
   alwaysFullInput.checked = state.alwaysFullAnimation;
   removeAfterDrawInput.checked = state.removeAfterDraw;
+  resultAutoHideInput.checked = state.result.autoHide;
+  resultSecondsRow.hidden = !state.result.autoHide;
+  resultSecondsInput.value = String(state.result.seconds);
+  resultSecondsValue.textContent = t('seconds', { seconds: state.result.seconds });
   soundInputs.update(state.sound);
   sharePanel.refresh();
 
@@ -256,6 +262,8 @@ addEntryButton.addEventListener('click', () =>
 durationInput.addEventListener('input', () => wheel.setAnimationDuration(Number(durationInput.value) * 1000));
 alwaysFullInput.addEventListener('change', () => wheel.setAlwaysFullAnimation(alwaysFullInput.checked));
 removeAfterDrawInput.addEventListener('change', () => wheel.setRemoveAfterDraw(removeAfterDrawInput.checked));
+resultAutoHideInput.addEventListener('change', () => wheel.setResult({ autoHide: resultAutoHideInput.checked }));
+resultSecondsInput.addEventListener('input', () => wheel.setResult({ seconds: Number(resultSecondsInput.value) }));
 
 /**
  * The entry text options, added to the appearance panel: the direction of its lines, and its size

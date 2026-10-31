@@ -49,6 +49,8 @@ export type WheelMessageKey =
   | 'maxLabelSize'
   | 'pointerColor'
   | 'removeAfterDraw'
+  | 'resultAutoHide'
+  | 'resultSeconds'
   | 'drawn'
   | 'allDrawn'
   | 'sound'
@@ -106,6 +108,8 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     maxLabelSize: 'Largest entry text size',
     pointerColor: 'Pointer color',
     removeAfterDraw: 'Remove entries after they are drawn',
+    resultAutoHide: 'Close the result automatically after a draw',
+    resultSeconds: 'Result shows for',
     drawn: 'drawn',
     allDrawn: 'All entries have been drawn. Reset to start over.',
     sound: 'Sound',
@@ -162,6 +166,8 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     maxLabelSize: '選項文字大小上限',
     pointerColor: '指針顏色',
     removeAfterDraw: '抽中後移除',
+    resultAutoHide: '抽中後自動關閉結果顯示',
+    resultSeconds: '結果顯示時間',
     drawn: '已抽',
     allDrawn: '所有選項都已抽完，請按「重置」重新開始。',
     sound: '音效',
