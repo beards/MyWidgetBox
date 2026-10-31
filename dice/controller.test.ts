@@ -413,6 +413,30 @@ describe('dice Share link', () => {
   });
 });
 
+describe('dice Settings export / import', () => {
+  it('restores exported Presets and publishes them', () => {
+    const source = createDiceController(createTestEnv());
+    source.setModifier(4);
+    source.createPreset('Fireball');
+    const file = source.exportSettings();
+
+    const dice = createDiceController(createTestEnv());
+    const seen: number[] = [];
+    dice.subscribe((state) => seen.push(state.diceSet.modifier));
+    expect(dice.importSettings(file)).toBe(true);
+    expect(dice.getState().presets.map((preset) => preset.name)).toEqual(['', 'Fireball']);
+    expect(seen).toEqual([4]);
+  });
+
+  it('keeps the current Settings when the file is invalid', () => {
+    const dice = createDiceController(createTestEnv());
+    dice.setModifier(2);
+    const before = dice.getState();
+    expect(dice.importSettings('{"namespace":"timer","version":1,"presets":[{"id":"1","name":"","settings":{}}]}')).toBe(false);
+    expect(dice.getState()).toBe(before);
+  });
+});
+
 /** Production random source (crypto.getRandomValues) with test doubles for browser-only parts. */
 function createBrowserEnvForNode() {
   return { ...createTestEnv(), randomUint32: createBrowserRandom() };

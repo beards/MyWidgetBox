@@ -73,6 +73,10 @@ export interface DiceController {
   deletePreset(id: string): void;
   /** A Share link to this page carrying the Settings in effect. */
   shareLink(options?: ShareLinkOptions): string;
+  /** JSON backup of every Preset. */
+  exportSettings(): string;
+  /** Replaces all Presets from an export file; returns false and changes nothing if it is invalid. */
+  importSettings(text: string): boolean;
 }
 
 export const MAX_DICE_PER_KIND = 99;
@@ -182,6 +186,12 @@ export function createDiceController(
     deletePreset: (id) => changeSettings(() => settings.deletePreset(id)),
     shareLink: (options) =>
       createShareLink(env.url, serializeSettings(diceSettingsSchema, settings.getSnapshot().settings), options),
+    exportSettings: () => settings.exportFile(),
+    importSettings(text) {
+      if (!settings.importFile(text)) return false;
+      update(fromSettings());
+      return true;
+    },
   };
 }
 

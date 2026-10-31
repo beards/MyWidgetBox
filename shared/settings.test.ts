@@ -173,3 +173,56 @@ describe('Settings store URL layer', () => {
     expect(store.getSnapshot()).toMatchObject({ selectedPresetId: '1', source: 'storage', settings: { width: 5 } });
   });
 });
+
+describe('Settings export / import', () => {
+  it('round-trips all Presets through an export file', () => {
+    const source = createSettingsStore(createTestEnv(), schema);
+    source.update({ width: 3, look: { color: 'blue' } });
+    source.createPreset('Big');
+    source.update({ width: 50, look: { color: 'green' } });
+    const file = source.exportFile();
+
+    const target = createSettingsStore(createTestEnv(), schema);
+    expect(target.importFile(file)).toBe(true);
+    expect(target.getSnapshot()).toEqual(source.getSnapshot());
+    expect(JSON.parse(file)).toMatchObject({ namespace: 'sample', version: 3 });
+  });
+
+  it('migrates an export file written by an old version', () => {
+    const store = createSettingsStore(createTestEnv(), schema);
+    const old = JSON.stringify({
+      namespace: 'sample',
+      version: 1,
+      selectedPresetId: '7',
+      presets: [{ id: '7', name: 'Old', settings: { size: 8 } }],
+    });
+    expect(store.importFile(old)).toBe(true);
+    expect(store.getSnapshot()).toMatchObject({
+      settings: { width: 8, look: { color: 'red' } },
+      presets: [{ id: '7', name: 'Old' }],
+      source: 'storage',
+    });
+  });
+
+  it('rejects invalid files and keeps the current Settings', () => {
+    const env = createTestEnv();
+    const store = createSettingsStore(env, schema);
+    store.update({ width: 4, look: { color: 'red' } });
+    const before = store.getSnapshot();
+    const stored = env.storage.getItem(settingsStorageKey('sample'));
+    const valid = { namespace: 'sample', version: 3, selectedPresetId: '1' };
+    const preset = (settings: unknown) => [{ id: '1', name: '', settings }];
+    for (const file of [
+      'not json',
+      '[]',
+      JSON.stringify({ ...valid, presets: [] }),
+      JSON.stringify({ ...valid, namespace: 'other', presets: preset({ width: 1 }) }),
+      JSON.stringify({ ...valid, version: 9, presets: preset({ width: 1 }) }),
+      JSON.stringify({ ...valid, presets: preset({ width: 'x' }) }),
+    ]) {
+      expect(store.importFile(file)).toBe(false);
+      expect(store.getSnapshot()).toEqual(before);
+      expect(env.storage.getItem(settingsStorageKey('sample'))).toBe(stored);
+    }
+  });
+});

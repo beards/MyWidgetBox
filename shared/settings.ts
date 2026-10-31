@@ -71,6 +71,13 @@ export interface SettingsStore<S> {
   renamePreset(id: string, name: string): void;
   /** Deletes a Preset; the last remaining one cannot be deleted. */
   deletePreset(id: string): void;
+  /** JSON backup of every Preset, with the schema version and the Widget's namespace. */
+  exportFile(): string;
+  /**
+   * Replaces all Presets with those in an export file, migrated and validated like stored
+   * ones. Returns false and changes nothing when the file (or any Preset in it) is unreadable.
+   */
+  importFile(text: string): boolean;
 }
 
 interface Preset<S> {
@@ -142,22 +149,25 @@ export function createSettingsStore<S extends object>(
   function readStorage(): StoredDocument<S> | null {
     try {
       const raw = env.storage.getItem(key);
-      if (raw === null) return null;
-      const data: unknown = JSON.parse(raw);
-      if (!isPlainObject(data) || !Array.isArray(data.presets)) return null;
-      const version = data.version as number;
-      // A Preset that cannot be read is dropped; the others survive.
-      const presets = data.presets.flatMap((entry: unknown): Preset<S>[] => {
-        if (!isPlainObject(entry) || typeof entry.id !== 'string' || typeof entry.name !== 'string') return [];
-        const settings = parseSettings(schema, { version, settings: entry.settings });
-        return settings ? [{ id: entry.id, name: entry.name, settings }] : [];
-      });
-      if (presets.length === 0) return null;
-      const selected = presets.find((preset) => preset.id === data.selectedPresetId) ?? presets[0]!;
-      return { presets, selectedPresetId: selected.id };
+      // A stored Preset that cannot be read is dropped; the others survive.
+      return raw === null ? null : parseDocument(JSON.parse(raw), false);
     } catch {
       return null;
     }
+  }
+
+  /** Reads a stored or exported document; `strict` rejects it when any Preset is unreadable. */
+  function parseDocument(data: unknown, strict: boolean): StoredDocument<S> | null {
+    if (!isPlainObject(data) || !Array.isArray(data.presets)) return null;
+    const version = data.version as number;
+    const presets = data.presets.flatMap((entry: unknown): Preset<S>[] => {
+      if (!isPlainObject(entry) || typeof entry.id !== 'string' || typeof entry.name !== 'string') return [];
+      const settings = parseSettings(schema, { version, settings: entry.settings });
+      return settings ? [{ id: entry.id, name: entry.name, settings }] : [];
+    });
+    if (presets.length === 0 || (strict && presets.length !== data.presets.length)) return null;
+    const selected = presets.find((preset) => preset.id === data.selectedPresetId) ?? presets[0]!;
+    return { presets, selectedPresetId: selected.id };
   }
 
   function save() {
@@ -214,6 +224,21 @@ export function createSettingsStore<S extends object>(
       const selectedPresetId = doc.selectedPresetId === id ? presets[0]!.id : doc.selectedPresetId;
       doc = { presets, selectedPresetId };
       save();
+    },
+    exportFile: () => JSON.stringify({ namespace: schema.namespace, version: schema.version, ...doc }, null, 2),
+    importFile(text) {
+      let imported: StoredDocument<S> | null;
+      try {
+        const data: unknown = JSON.parse(text);
+        imported = isPlainObject(data) && data.namespace === schema.namespace ? parseDocument(data, true) : null;
+      } catch {
+        return false;
+      }
+      if (!imported) return false;
+      urlSettings = null;
+      doc = imported;
+      save();
+      return true;
     },
   };
 }

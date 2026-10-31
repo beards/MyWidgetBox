@@ -25,7 +25,10 @@ export type DiceMessageKey =
   | 'shareTransparent'
   | 'copyShareLink'
   | 'copied'
-  | 'copyFailed';
+  | 'copyFailed'
+  | 'exportSettings'
+  | 'importSettings'
+  | 'importError';
 
 export const messages: MessageTables<DiceMessageKey> = {
   en: {
@@ -54,6 +57,9 @@ export const messages: MessageTables<DiceMessageKey> = {
     copyShareLink: 'Copy Share link',
     copied: 'Copied',
     copyFailed: 'Copy the link below',
+    exportSettings: 'Export',
+    importSettings: 'Import',
+    importError: 'This file could not be imported. Your Settings were not changed.',
   },
   'zh-Hant': {
     title: '骰子 · MyWidgetBox',
@@ -81,5 +87,8 @@ export const messages: MessageTables<DiceMessageKey> = {
     copyShareLink: '複製 Share link',
     copied: '已複製',
     copyFailed: '請複製下方連結',
+    exportSettings: '匯出',
+    importSettings: '匯入',
+    importError: '無法匯入此檔案，現有 Settings 未變更。',
   },
 };

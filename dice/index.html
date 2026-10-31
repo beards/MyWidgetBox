@@ -26,6 +26,11 @@
           <button type="button" id="preset-new" data-i18n="newPreset"></button>
           <button type="button" id="preset-delete" data-i18n="deletePreset"></button>
         </div>
+        <div class="dice__presets">
+          <button type="button" id="settings-export" data-i18n="exportSettings"></button>
+          <label><span data-i18n="importSettings"></span> <input type="file" id="settings-import" accept="application/json,.json" /></label>
+          <p id="settings-import-error" role="alert"></p>
+        </div>
 
         <h2 data-i18n="diceSet"></h2>
         <ul class="dice__groups" id="groups"></ul>

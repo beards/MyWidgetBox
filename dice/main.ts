@@ -36,6 +36,9 @@ const shareTransparent = $<HTMLInputElement>('#share-transparent');
 const shareCopy = $<HTMLButtonElement>('#share-copy');
 const shareStatus = $('#share-status');
 const shareUrl = $<HTMLInputElement>('#share-url');
+const settingsExport = $<HTMLButtonElement>('#settings-export');
+const settingsImport = $<HTMLInputElement>('#settings-import');
+const importError = $('#settings-import-error');
 
 function renderAddSides() {
   const selected = addSides.value || '20';
@@ -154,3 +157,16 @@ shareCopy.addEventListener('click', async () => {
   }
 });
 shareUrl.addEventListener('focus', () => shareUrl.select());
+settingsExport.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));
+  link.download = 'mywidgetbox-dice-settings.json';
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+settingsImport.addEventListener('change', async () => {
+  const file = settingsImport.files?.[0];
+  if (!file) return;
+  importError.textContent = dice.importSettings(await file.text()) ? '' : t('importError');
+  settingsImport.value = '';
+});
