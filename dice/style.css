@@ -25,6 +25,12 @@ body {
   cursor: pointer;
 }
 
+.dice__language {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+}
+
 .dice__roll {
   font-size: 1.25rem;
   padding: 0.5rem 1.5rem;

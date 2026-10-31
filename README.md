@@ -31,6 +31,8 @@ shared/             opt-in modules any Widget may use
   env.ts            Env interface + production Env (crypto, Date.now, localStorage, location)
   test-env.ts       deterministic Env for tests (fixed random sequence, manual clock, memory storage)
   random.ts         unbiased random integers (rejection sampling)
+  i18n.ts           UI text: message tables, language resolution (?lang= > saved choice > browser)
+  i18n-dom.ts       binds data-i18n attributes and mounts the language switcher
 dice/               one directory per Widget, served at /<name>/
   index.html        page entry
   main.ts           view layer: DOM, animation, sound

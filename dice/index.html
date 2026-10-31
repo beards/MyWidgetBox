@@ -3,36 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dice · MyWidgetBox</title>
+    <title data-i18n="title"></title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
+    <div class="dice__language" id="language"></div>
     <main class="dice">
-      <button type="button" class="dice__die" id="die" aria-live="polite">?</button>
+      <button type="button" class="dice__die" id="die" aria-live="polite" data-i18n-aria-label="roll">?</button>
       <p class="dice__breakdown" id="breakdown"></p>
-      <button type="button" class="dice__roll" id="roll"></button>
+      <button type="button" class="dice__roll" id="roll" data-i18n="roll"></button>
 
       <section class="dice__controls">
-        <h2 id="presets-heading"></h2>
+        <h2 data-i18n="presets"></h2>
         <div class="dice__presets">
-          <select id="preset"></select>
-          <input type="text" id="preset-name" />
-          <button type="button" id="preset-new"></button>
-          <button type="button" id="preset-delete"></button>
+          <select id="preset" data-i18n-aria-label="presets"></select>
+          <input type="text" id="preset-name" data-i18n-aria-label="presetName" />
+          <button type="button" id="preset-new" data-i18n="newPreset"></button>
+          <button type="button" id="preset-delete" data-i18n="deletePreset"></button>
         </div>
 
-        <h2 id="dice-set-heading"></h2>
+        <h2 data-i18n="diceSet"></h2>
         <ul class="dice__groups" id="groups"></ul>
         <div class="dice__add">
           <select id="add-sides"></select>
-          <button type="button" id="add-die"></button>
+          <button type="button" id="add-die" data-i18n="addDie"></button>
         </div>
         <label class="dice__modifier">
-          <span id="modifier-label"></span>
+          <span data-i18n="modifier"></span>
           <input type="number" id="modifier" step="1" value="0" />
         </label>
 
-        <h2 id="history-heading"></h2>
+        <h2 data-i18n="history"></h2>
         <ol class="dice__history" id="history"></ol>
       </section>
     </main>

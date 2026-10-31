@@ -1,9 +1,17 @@
 // View layer: owns the DOM, subscribes to the controller, and calls its actions.
 import { createBrowserEnv } from '../shared/env';
+import { createI18n } from '../shared/i18n';
+import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { DIE_SIDES, MAX_DICE_PER_KIND, type DiceState, type DieSides, createDiceController, formatOutcome } from './controller';
-import { strings } from './strings';
+import { messages } from './messages';
 
-const dice = createDiceController(createBrowserEnv());
+const env = createBrowserEnv();
+const dice = createDiceController(env);
+const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
+bindStaticText(i18n);
+mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
+const t = i18n.t;
+const dieLabel = (sides: number) => t('dieLabel', { sides });
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const die = $<HTMLButtonElement>('#die');
@@ -19,24 +27,16 @@ const presetName = $<HTMLInputElement>('#preset-name');
 const presetNew = $<HTMLButtonElement>('#preset-new');
 const presetDelete = $<HTMLButtonElement>('#preset-delete');
 
-die.setAttribute('aria-label', strings.roll);
-rollButton.textContent = strings.roll;
-$('#presets-heading').textContent = strings.presets;
-presetSelect.setAttribute('aria-label', strings.presets);
-presetName.setAttribute('aria-label', strings.presetName);
-presetNew.textContent = strings.newPreset;
-presetDelete.textContent = strings.deletePreset;
-$('#dice-set-heading').textContent = strings.diceSet;
-addButton.textContent = strings.addDie;
-$('#modifier-label').textContent = strings.modifier;
-$('#history-heading').textContent = strings.history;
-addSides.replaceChildren(
-  ...DIE_SIDES.map((sides) => new Option(strings.dieLabel(sides), String(sides), sides === 20, sides === 20)),
-);
+function renderAddSides() {
+  const selected = addSides.value || '20';
+  addSides.replaceChildren(
+    ...DIE_SIDES.map((sides) => new Option(dieLabel(sides), String(sides), false, String(sides) === selected)),
+  );
+}
 
 function render({ diceSet, presets, selectedPresetId, outcome, history }: DiceState) {
   presetSelect.replaceChildren(
-    ...presets.map(({ id, name }) => new Option(name || strings.unnamedPreset, id, false, id === selectedPresetId)),
+    ...presets.map(({ id, name }) => new Option(name || t('unnamedPreset'), id, false, id === selectedPresetId)),
   );
   const selected = presets.find((preset) => preset.id === selectedPresetId);
   presetName.value = selected?.name ?? '';
@@ -49,21 +49,21 @@ function render({ diceSet, presets, selectedPresetId, outcome, history }: DiceSt
 
   groupList.replaceChildren(
     ...diceSet.groups.map(({ sides, count }) => {
-      const label = strings.dieLabel(sides);
+      const label = dieLabel(sides);
       const item = document.createElement('li');
       const countInput = document.createElement('input');
       countInput.type = 'number';
       countInput.min = '1';
       countInput.max = String(MAX_DICE_PER_KIND);
       countInput.value = String(count);
-      countInput.setAttribute('aria-label', strings.count(label));
+      countInput.setAttribute('aria-label', t('count', { label }));
       countInput.addEventListener('change', () => edit(() => dice.setCount(sides, Number(countInput.value))));
       const name = document.createElement('span');
       name.textContent = label;
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = '×';
-      remove.setAttribute('aria-label', strings.removeDie(label));
+      remove.setAttribute('aria-label', t('removeDie', { label }));
       remove.disabled = diceSet.groups.length === 1;
       remove.addEventListener('click', () => dice.removeDie(sides));
       item.append(countInput, name, remove);
@@ -87,6 +87,11 @@ function edit(action: () => void) {
 }
 
 dice.subscribe(render);
+i18n.subscribe(() => {
+  renderAddSides();
+  render(dice.getState());
+});
+renderAddSides();
 render(dice.getState());
 
 die.addEventListener('click', () => dice.roll());
@@ -97,7 +102,7 @@ presetName.addEventListener('change', () => {
   const id = dice.getState().selectedPresetId;
   if (id) dice.renamePreset(id, presetName.value.trim());
 });
-presetNew.addEventListener('click', () => dice.createPreset(strings.newPresetName(dice.getState().presets.length + 1)));
+presetNew.addEventListener('click', () => dice.createPreset(t('newPresetName', { n: dice.getState().presets.length + 1 })));
 presetDelete.addEventListener('click', () => {
   const id = dice.getState().selectedPresetId;
   if (id) dice.deletePreset(id);
