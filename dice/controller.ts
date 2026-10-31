@@ -1,3 +1,4 @@
+import { type Appearance, appearanceDefaults, isAppearance, isHexColor } from '../shared/appearance';
 import type { Env } from '../shared/env';
 import { randomBelow } from '../shared/random';
 import {
@@ -36,9 +37,18 @@ export interface DiceOutcome {
   total: number;
 }
 
+/** The shared appearance baseline plus the dice's own items (also used by the 3D view). */
+export interface DiceAppearance extends Appearance {
+  /** `#rrggbb` color of the die body. */
+  dieColor: string;
+  /** `#rrggbb` color of the pips / face numbers. */
+  pipColor: string;
+}
+
 /** What the dice remember and share; one value per Preset. Add new fields with defaults here. */
 export interface DiceSettings {
   diceSet: DiceSet;
+  appearance: DiceAppearance;
   animation: AnimationSettings;
   /** Roll by shaking the phone (off by default; needs motion permission on iOS). */
   shakeToRoll: boolean;
@@ -54,6 +64,8 @@ export interface AnimationSettings {
 export interface DiceState {
   /** The dice set of the Settings in effect. */
   diceSet: DiceSet;
+  /** The appearance of the Settings in effect. */
+  appearance: DiceAppearance;
   presets: PresetSummary[];
   /** null while Settings opened from a Share link are in effect and not saved. */
   selectedPresetId: string | null;
@@ -80,6 +92,8 @@ export interface DiceController {
   setCount(sides: DieSides, count: number): void;
   /** Sets the fixed integer added to every total; non-integers are ignored. */
   setModifier(modifier: number): void;
+  /** Replaces the appearance (applied live); invalid appearances are ignored. */
+  setAppearance(appearance: DiceAppearance): void;
   /** Decides a new Outcome and starts animating it; ignored while animating. */
   roll(): void;
   /** Called by the view when the animation of the current Outcome has finished. */
@@ -119,11 +133,19 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
     diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
     animation: { duration: 3000, alwaysFull: false },
     shakeToRoll: false,
+    appearance: { ...appearanceDefaults, dieColor: '#f7f3e8', pipColor: '#1f1f1f' },
   },
   isValid: (settings): settings is DiceSettings =>
-    isDiceSet((settings as DiceSettings).diceSet) && isAnimationSettings((settings as DiceSettings).animation) &&
-    typeof (settings as DiceSettings).shakeToRoll === 'boolean',
+    isDiceSet((settings as DiceSettings).diceSet) &&
+    isAnimationSettings((settings as DiceSettings).animation) &&
+    typeof (settings as DiceSettings).shakeToRoll === 'boolean' &&
+    isDiceAppearance((settings as DiceSettings).appearance),
 };
+
+function isDiceAppearance(value: unknown): value is DiceAppearance {
+  const { dieColor, pipColor } = (value ?? {}) as Partial<DiceAppearance>;
+  return isAppearance(value) && isHexColor(dieColor) && isHexColor(pipColor);
+}
 
 function isValidDuration(duration: unknown): duration is number {
   return typeof duration === 'number' && duration >= MIN_ANIMATION_DURATION && duration <= MAX_ANIMATION_DURATION;
@@ -172,6 +194,7 @@ export function createDiceController(
     const { settings: current, presets, selectedPresetId } = settings.getSnapshot();
     return {
       diceSet: current.diceSet,
+      appearance: current.appearance,
       animationDuration: current.animation.duration,
       alwaysFullAnimation: current.animation.alwaysFull,
       shakeToRoll: current.shakeToRoll,
@@ -235,6 +258,10 @@ export function createDiceController(
     setModifier(modifier) {
       if (!Number.isSafeInteger(modifier)) return;
       setDiceSet({ ...state.diceSet, modifier });
+    },
+    setAppearance(appearance) {
+      if (!isDiceAppearance(appearance)) return;
+      changeSettings(() => settings.update({ ...settings.getSnapshot().settings, appearance }));
     },
     roll() {
       if (state.animating) return;

@@ -1,4 +1,5 @@
 // View layer: owns the DOM, subscribes to the controller, and calls its actions.
+import { applyAppearance, mountAppearancePanel } from '../shared/appearance-dom';
 import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
@@ -7,6 +8,7 @@ import { readDisplayOptions } from '../shared/share-link';
 import {
   DIE_SIDES,
   MAX_DICE_PER_KIND,
+  type DiceAppearance,
   type DiceOutcome,
   type DiceSet,
   type DiceState,
@@ -20,7 +22,8 @@ import { createDiceScene } from './scene';
 import { listenForShakes } from './shake';
 
 const env = createBrowserEnv();
-applyDisplayMode(readDisplayOptions(env.url));
+const displayOptions = readDisplayOptions(env.url);
+applyDisplayMode(displayOptions);
 const dice = createDiceController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
@@ -62,6 +65,18 @@ const scene = createDiceScene(die);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each roll starts its animation exactly once. */
 let playing: DiceOutcome | null = null;
+const display = $('#display');
+const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelector<HTMLElement>('#appearance')!, {
+  i18n,
+  fields: [
+    { key: 'dieColor', label: () => t('dieColor') },
+    { key: 'pipColor', label: () => t('pipColor') },
+  ],
+  onChange(appearance) {
+    dice.setAppearance(appearance);
+    appearancePanel.update(dice.getState().appearance);
+  },
+});
 
 function renderAddSides() {
   const selected = addSides.value || '20';
@@ -71,7 +86,11 @@ function renderAddSides() {
 }
 
 function render(state: DiceState) {
-  const { diceSet, presets, selectedPresetId, outcome, history, animating } = state;
+  const { diceSet, appearance, presets, selectedPresetId, outcome, history, animating } = state;
+  applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
+  scene.setColors({ body: appearance.dieColor, label: appearance.pipColor });
+  appearancePanel.update(appearance);
+
   presetSelect.replaceChildren(
     ...(selectedPresetId === null ? [new Option(t('sharedPreset'), '', false, true)] : []),
     ...presets.map(({ id, name }) => new Option(name || t('unnamedPreset'), id, false, id === selectedPresetId)),

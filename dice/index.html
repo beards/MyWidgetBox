@@ -9,8 +9,10 @@
   <body>
     <div class="dice__language" id="language" data-controls></div>
     <main class="dice">
-      <button type="button" class="dice__stage" id="die" data-i18n-aria-label="roll"></button>
-      <p class="dice__breakdown" id="breakdown" aria-live="polite"></p>
+      <div class="dice__display" id="display">
+        <button type="button" class="dice__stage" id="die" data-i18n-aria-label="roll"></button>
+        <p class="dice__breakdown" id="breakdown" aria-live="polite"></p>
+      </div>
       <div class="dice__actions" data-controls>
         <button type="button" class="dice__roll" id="roll" data-i18n="roll"></button>
         <button type="button" id="reset" data-i18n="reset"></button>
@@ -59,6 +61,8 @@
           <span data-i18n="shakeToRoll"></span>
         </label>
         <p id="shake-status" role="status"></p>
+
+        <div class="dice__appearance" id="appearance"></div>
 
         <h2 data-i18n="shareLink"></h2>
         <div class="dice__share">

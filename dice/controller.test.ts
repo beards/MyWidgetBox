@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createBrowserRandom } from '../shared/env';
 import { settingsStorageKey } from '../shared/settings';
+import { createShareLink } from '../shared/share-link';
 import { createTestEnv } from '../shared/test-env';
 import {
   DIE_SIDES,
+  type DiceAppearance,
   type DiceController,
   type DieSides,
   REDUCED_MOTION_DURATION,
@@ -445,6 +447,143 @@ describe('dice Settings persistence and Presets', () => {
 
     dice.selectPreset(first);
     expect(seen).toEqual([1]);
+  });
+});
+
+describe('dice appearance Settings', () => {
+  const custom: DiceAppearance = {
+    background: { kind: 'image', color: '#102030', imageUrl: 'https://example.test/bg.png' },
+    fontFamily: 'Georgia, serif',
+    fontSize: 32,
+    textColor: '#eeeeee',
+    scale: 1.5,
+    dieColor: '#ff0000',
+    pipColor: '#00ff00',
+  };
+
+  it('opens with a solid white background, ivory dice with dark pips and no scaling', () => {
+    expect(createDiceController(createTestEnv()).getState().appearance).toEqual({
+      background: { kind: 'solid', color: '#ffffff', imageUrl: '' },
+      fontFamily: '',
+      fontSize: 20,
+      textColor: '#222222',
+      scale: 1,
+      dieColor: '#f7f3e8',
+      pipColor: '#1f1f1f',
+    });
+  });
+
+  it('applies a new appearance and notifies subscribers', () => {
+    const dice = createDiceController(createTestEnv());
+    const seen: unknown[] = [];
+    dice.subscribe((state) => seen.push(state.appearance));
+
+    dice.setAppearance(custom);
+    expect(dice.getState().appearance).toEqual(custom);
+    expect(seen).toEqual([custom]);
+  });
+
+  it('keeps the appearance after a reload', () => {
+    const env = createTestEnv();
+    createDiceController(env).setAppearance(custom);
+    expect(createDiceController(env).getState().appearance).toEqual(custom);
+  });
+
+  it('saves the appearance with each Preset', () => {
+    const dice = createDiceController(createTestEnv());
+    const first = dice.getState().selectedPresetId!;
+    const defaults = dice.getState().appearance;
+    dice.createPreset('Stream');
+    const stream = dice.getState().selectedPresetId!;
+    dice.setAppearance(custom);
+
+    dice.selectPreset(first);
+    expect(dice.getState().appearance).toEqual(defaults);
+    dice.selectPreset(stream);
+    expect(dice.getState().appearance).toEqual(custom);
+  });
+
+  it.each([
+    ['an unknown background kind', { background: { ...custom.background, kind: 'video' } }],
+    ['a background color that is not #rrggbb', { background: { ...custom.background, color: 'red' } }],
+    ['a non-http image URL', { background: { ...custom.background, imageUrl: 'javascript:alert(1)' } }],
+    ['a relative image URL', { background: { ...custom.background, imageUrl: 'bg.png' } }],
+    ['a font size below the minimum', { fontSize: 2 }],
+    ['a font size that is not a number', { fontSize: '20px' }],
+    ['a text color that is not #rrggbb', { textColor: 'white' }],
+    ['a scale above the maximum', { scale: 10 }],
+    ['a scale of zero', { scale: 0 }],
+    ['an overlong font family', { fontFamily: 'x'.repeat(201) }],
+    ['a die color that is not #rrggbb', { dieColor: '#fff' }],
+    ['a missing pip color', { pipColor: undefined }],
+  ])('ignores an appearance with %s', (_, change) => {
+    const dice = createDiceController(createTestEnv());
+    dice.setAppearance(custom);
+
+    dice.setAppearance({ ...custom, ...change } as unknown as DiceAppearance);
+    expect(dice.getState().appearance).toEqual(custom);
+  });
+
+  it('accepts a transparent background and an empty image URL', () => {
+    const dice = createDiceController(createTestEnv());
+    const transparent = { ...custom, background: { kind: 'transparent', color: '#000000', imageUrl: '' } } as const;
+
+    dice.setAppearance(transparent);
+    expect(dice.getState().appearance).toEqual(transparent);
+  });
+
+  it('gives Settings saved before appearance existed the default appearance', () => {
+    const env = createTestEnv();
+    env.storage.setItem(
+      settingsStorageKey('dice'),
+      JSON.stringify({
+        version: 1,
+        selectedPresetId: '1',
+        presets: [{ id: '1', name: 'Old', settings: { diceSet: { groups: [{ sides: 20, count: 2 }], modifier: 1 } } }],
+      }),
+    );
+
+    const { diceSet, appearance } = createDiceController(env).getState();
+    expect(diceSet).toEqual({ groups: [{ sides: 20, count: 2 }], modifier: 1 });
+    expect(appearance).toEqual(createDiceController(createTestEnv()).getState().appearance);
+  });
+
+  it('fills appearance items added later from defaults, keeping the stored ones', () => {
+    const env = createTestEnv();
+    const partial: Partial<DiceAppearance> = { ...custom };
+    delete partial.scale;
+    delete partial.pipColor;
+    env.storage.setItem(
+      settingsStorageKey('dice'),
+      JSON.stringify({
+        version: 1,
+        selectedPresetId: '1',
+        presets: [{ id: '1', name: '', settings: { diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 }, appearance: partial } }],
+      }),
+    );
+
+    expect(createDiceController(env).getState().appearance).toEqual({ ...custom, scale: 1, pipColor: '#1f1f1f' });
+  });
+
+  it('opens a Share link with the same appearance, without writing it to storage', () => {
+    const sharer = createDiceController(createTestEnv({ url: 'https://example.test/dice/' }));
+    sharer.setAppearance(custom);
+
+    const viewerEnv = createTestEnv({ url: sharer.shareLink() });
+    const viewer = createDiceController(viewerEnv);
+    expect(viewer.getState().appearance).toEqual(custom);
+    expect(viewer.getState().selectedPresetId).toBeNull();
+    viewer.setAppearance({ ...custom, scale: 2 });
+    expect(viewerEnv.storage.getItem(settingsStorageKey('dice'))).toBeNull();
+  });
+
+  it('falls back to the stored appearance when a Share link carries an invalid one', () => {
+    const page = new URL('https://example.test/dice/');
+    const invalid = { version: 1, settings: { appearance: { ...custom, scale: 99 } } };
+    const env = { ...createTestEnv(), url: new URL(createShareLink(page, invalid)) };
+    createDiceController({ ...env, url: page }).setAppearance(custom);
+
+    expect(createDiceController(env).getState().appearance).toEqual(custom);
   });
 });
 

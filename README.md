@@ -34,7 +34,9 @@ shared/             opt-in modules any Widget may use
   i18n.ts           UI text: message tables, language resolution (?lang= > saved choice > browser)
   i18n-dom.ts       binds data-i18n attributes and mounts the language switcher
   share-link.ts     Share link encoding/decoding (?s=, display, transparent, lang)
-  display-mode.ts   Display mode: hides [data-controls] elements, optional transparent background
+  display-mode.ts   Display mode: hides [data-controls] elements
+  appearance.ts     appearance Settings baseline (background solid/transparent/image, font, size, scale); Widgets extend it
+  appearance-dom.ts applies an appearance to the page and mounts the appearance panel
 dice/               one directory per Widget, served at /<name>/
   index.html        page entry
   main.ts           view layer: DOM, animation, sound

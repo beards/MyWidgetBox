@@ -1,3 +1,4 @@
+import { type AppearanceMessageKey, appearanceMessages } from '../shared/appearance-messages';
 import type { MessageTables } from '../shared/i18n';
 
 export type DiceMessageKey =
@@ -35,10 +36,13 @@ export type DiceMessageKey =
   | 'copyFailed'
   | 'exportSettings'
   | 'importSettings'
-  | 'importError';
+  | 'importError'
+  | 'dieColor'
+  | 'pipColor';
 
-export const messages: MessageTables<DiceMessageKey> = {
+export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
   en: {
+    ...appearanceMessages.en,
     title: 'Dice · MyWidgetBox',
     roll: 'Roll',
     reset: 'Reset',
@@ -74,8 +78,11 @@ export const messages: MessageTables<DiceMessageKey> = {
     exportSettings: 'Export',
     importSettings: 'Import',
     importError: 'This file could not be imported. Your Settings were not changed.',
+    dieColor: 'Die color',
+    pipColor: 'Pip color',
   },
   'zh-Hant': {
+    ...appearanceMessages['zh-Hant'],
     title: '骰子 · MyWidgetBox',
     roll: '擲骰',
     reset: '重置',
@@ -111,5 +118,7 @@ export const messages: MessageTables<DiceMessageKey> = {
     exportSettings: '匯出',
     importSettings: '匯入',
     importError: '無法匯入此檔案，現有 Settings 未變更。',
+    dieColor: '骰子顏色',
+    pipColor: '點數顏色',
   },
 };
