@@ -16,6 +16,16 @@
         align-items: center;
         justify-content: space-between;
       }
+      /* Touch screens: finger-sized links and language switcher. */
+      @media (pointer: coarse) {
+        li a {
+          display: inline-block;
+          padding: 0.75rem 0;
+        }
+        select {
+          min-height: 2.75rem;
+        }
+      }
     </style>
   </head>
   <body>

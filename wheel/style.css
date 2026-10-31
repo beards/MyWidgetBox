@@ -243,3 +243,57 @@ body {
   flex-direction: column;
   gap: 0.25rem;
 }
+
+/* Narrow screens: the language switcher takes its own row instead of covering the wheel. */
+@media (max-width: 40rem) {
+  .wheel__language {
+    position: static;
+    justify-self: end;
+    margin: 1rem 1rem 0;
+  }
+}
+
+/* Narrow screens: keep the padded panel and the entry rows inside the viewport. */
+.wheel__controls {
+  box-sizing: border-box;
+}
+
+.wheel__entries input[type='color'] {
+  flex: none;
+}
+
+@media (max-width: 22rem) {
+  .wheel__entries li {
+    gap: 0.25rem;
+  }
+
+  .wheel__entries input[type='text'] {
+    min-width: 4rem;
+  }
+
+  .wheel__entries input[type='number'] {
+    width: 3.5rem;
+  }
+}
+
+/* Touch screens: finger-sized controls (desktop and OBS keep the compact layout). */
+@media (pointer: coarse) {
+  button,
+  select,
+  input:not([type='checkbox'], [type='range']) {
+    min-height: 2.75rem;
+  }
+
+  button {
+    min-width: 2.75rem;
+  }
+
+  input[type='checkbox'] {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  input[type='range'] {
+    min-height: 2rem;
+  }
+}

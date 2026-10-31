@@ -160,3 +160,69 @@ body {
 .dice__shared[hidden] {
   display: none;
 }
+
+/* No-WebGL fallback (fallback-scene.ts): flat tiles in the die colors. */
+.dice__fallback {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: 0.75rem;
+  height: 100%;
+}
+
+.dice__fallback-die {
+  min-width: 3.5rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: var(--die-body, #f7f3e8);
+  color: var(--die-label, #1f1f1f);
+  box-shadow: 0 0.2rem 0.6rem rgb(0 0 0 / 0.3);
+  font-size: 2rem;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Narrow screens: the language switcher takes its own row instead of covering the dice. */
+@media (max-width: 40rem) {
+  .dice__language {
+    position: static;
+    justify-self: end;
+    margin: 1rem 1rem 0;
+  }
+}
+
+/* Narrow screens: control rows wrap instead of pushing the page sideways. */
+.dice__controls {
+  box-sizing: border-box;
+  max-width: 100vw;
+}
+
+.dice__presets,
+.dice__add,
+.dice__duration,
+.dice__share-copy {
+  flex-wrap: wrap;
+}
+
+/* Touch screens: finger-sized controls (desktop and OBS keep the compact layout). */
+@media (pointer: coarse) {
+  button,
+  select,
+  input:not([type='checkbox'], [type='range']) {
+    min-height: 2.75rem;
+  }
+
+  button {
+    min-width: 2.75rem;
+  }
+
+  input[type='checkbox'] {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  input[type='range'] {
+    min-height: 2rem;
+  }
+}

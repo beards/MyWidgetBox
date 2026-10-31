@@ -19,7 +19,8 @@ import {
   formatOutcome,
 } from './controller';
 import { messages } from './messages';
-import { createDiceScene } from './scene';
+import { createFallbackDiceScene } from './fallback-scene';
+import { type DiceScene, createDiceScene } from './scene';
 import { listenForShakes } from './shake';
 
 const env = createBrowserEnv();
@@ -65,7 +66,7 @@ const soundUrlInput = $<HTMLInputElement>('#sound-url');
 const shakeInput = $<HTMLInputElement>('#shake-to-roll');
 const shakeStatus = $('#shake-status');
 
-const scene = createDiceScene(die);
+const scene = createSceneOrFallback(die);
 const sound = createSoundPlayer();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each roll starts its animation exactly once. */
@@ -161,6 +162,16 @@ function render(state: DiceState) {
       return item;
     }),
   );
+}
+
+/** three.js throws when no WebGL context can be created; the dice then roll as flat tiles. */
+function createSceneOrFallback(container: HTMLElement): DiceScene {
+  try {
+    return createDiceScene(container);
+  } catch {
+    container.replaceChildren();
+    return createFallbackDiceScene(container);
+  }
 }
 
 /** Before the first roll, show the dice set with every die on its highest face. */

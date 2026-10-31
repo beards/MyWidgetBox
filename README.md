@@ -4,6 +4,22 @@ A growing collection of small, single-purpose browser Widgets for live streaming
 
 Vocabulary (Widget, Settings, State, Outcome, ...) is defined in [GLOSSARY.md](GLOSSARY.md); architecture decisions live in [docs/adr/](docs/adr/).
 
+## Browser support
+
+- **Hard support:** current Chrome / Edge (Chromium) and the OBS Browser Source (Chromium-based). Every feature must work there.
+- **Best effort:** current Firefox, Safari, iOS Safari and Android Chrome. The main flows (roll, spin, start a timer, Settings and Presets, Share links, Display mode) work; the features below may degrade.
+
+On touch screens the controls grow to finger size and narrow layouts reflow; desktop and OBS keep the compact layout.
+
+| Feature | Where it degrades | What happens |
+| --- | --- | --- |
+| Screen Wake Lock (timer keeps the screen on while running) | Browsers without the API (older Safari < 16.4, Firefox < 126), low-battery mode, hidden tab | The lock is skipped silently; the screen may turn off, the timer keeps counting. |
+| Shake to roll (dice, `DeviceMotionEvent`) | Desktop browsers have no motion sensor; iOS Safari asks for permission | "Not supported" / "denied" is shown under the option. On iOS permission can only be asked from a tap: turning the option on asks right away; a page loaded with it already on asks on the first tap. |
+| Sound (Web Audio built-ins, custom sound URL) | Browsers block audio until the user has interacted with the page | A page nobody has clicked (e.g. a timer alert in an untouched tab) may stay silent; one click or key press unlocks it. OBS Browser Source plays audio without interaction. A custom URL that fails to load falls back to the built-in sound. |
+| 3D dice (WebGL via three.js) | WebGL unavailable (GPU disabled, blocked by policy, very old devices) | The dice roll as flat colored tiles showing each value; the Outcome, history and timing are unchanged. |
+| Appearance scale (CSS `zoom`) | Firefox < 126 | The scale setting has no effect. |
+| Copy Share link (Clipboard API) | Insecure origins, permission refused | "Copy failed" is shown and the link text is selected for copying by hand. |
+
 ## Local development
 
 Requires Node 26 and npm.

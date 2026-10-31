@@ -209,3 +209,39 @@ body {
   flex-direction: column;
   gap: 0.25rem;
 }
+
+/* Narrow screens: the language switcher takes its own row instead of covering the digits. */
+@media (max-width: 40rem) {
+  .timer__language {
+    position: static;
+    justify-self: end;
+    margin: 1rem 1rem 0;
+  }
+}
+
+/* Touch screens: finger-sized controls, and the digits shrink to fit a phone's width
+   (desktop and OBS keep the configured text size). */
+@media (pointer: coarse) {
+  .timer__value {
+    font-size: min(1em, 14vw);
+  }
+
+  button,
+  select,
+  input:not([type='checkbox'], [type='range']) {
+    min-height: 2.75rem;
+  }
+
+  button {
+    min-width: 2.75rem;
+  }
+
+  input[type='checkbox'] {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  input[type='range'] {
+    min-height: 2rem;
+  }
+}
