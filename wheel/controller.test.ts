@@ -287,7 +287,6 @@ describe('wheel Settings, Presets and Share link', () => {
 });
 
 describe('wheel remove after draw', () => {
-  const labels = (entries: { label: string }[]) => entries.map((entry) => entry.label);
 
   it('takes a drawn entry off the wheel once its spin is revealed, so it cannot be drawn again', () => {
     // Weights 1 + 1 + 1: 0.5 falls in b; then with b gone (a + c), 0.5 falls in c.
@@ -428,7 +427,109 @@ describe('wheel remove after draw', () => {
   });
 });
 
+describe('wheel drawn State scope', () => {
+  const twoEntries = [
+    { label: 'a', weight: 1 },
+    { label: 'b', weight: 1 },
+  ];
+
+  it('keeps the drawn entries per Preset', () => {
+    const env = createTestEnv({ random: [0, 0] });
+    const wheel = wheelWith(env, twoEntries);
+    wheel.setRemoveAfterDraw(true);
+    const first = wheel.getState().selectedPresetId!;
+    spinAndFinish(wheel);
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['b']);
+
+    wheel.createPreset('Copy');
+    expect(wheel.getState()).toMatchObject({ drawnEntryIds: [], allDrawn: false });
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['a', 'b']);
+    wheel.selectPreset(first);
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['b']);
+  });
+
+  it("a Share link opened in the same browser does not show the stored Preset's draws", () => {
+    const env = createTestEnv({ random: [0, 0] });
+    const wheel = wheelWith(env, twoEntries);
+    wheel.setRemoveAfterDraw(true);
+    spinAndFinish(wheel);
+    const opened = createWheelController({ ...env, url: new URL(wheel.shareLink()) });
+    expect(opened.getState()).toMatchObject({ drawnEntryIds: [], selectedPresetId: null });
+  });
+
+  it('keeps draws stored before they were kept per Preset', () => {
+    const env = createTestEnv();
+    env.storage.setItem(WHEEL_STATE_KEY, JSON.stringify({ version: 1, drawn: ['2'] }));
+    const wheel = createWheelController(env);
+    wheel.setRemoveAfterDraw(true);
+    expect(wheel.getState().drawnEntryIds).toEqual(['2']);
+  });
+
+  it('a tab picks up draws made in another tab', () => {
+    const env = createTestEnv({ random: [0, 0] });
+    const wheel = wheelWith(env, twoEntries);
+    wheel.setRemoveAfterDraw(true);
+    const otherTab = createTestEnv({ storage: env.storage });
+    const other = createWheelController(otherTab);
+    spinAndFinish(wheel);
+    otherTab.notifyStorageChange(WHEEL_STATE_KEY);
+    expect(labels(other.getState().remainingEntries)).toEqual(['b']);
+  });
+
+  it("tabs do not overwrite each other's draws", () => {
+    const env = createTestEnv({ random: [0, 0] });
+    const wheel = wheelWith(env, twoEntries);
+    wheel.setRemoveAfterDraw(true);
+    const other = createWheelController({ ...createTestEnv({ storage: env.storage }), randomUint32: () => at(0.9) });
+    spinAndFinish(wheel);
+    // The other tab has not heard of the first draw when it records its own.
+    spinAndFinish(other);
+    expect(createWheelController(env).getState().allDrawn).toBe(true);
+  });
+});
+
+describe('wheel while spinning', () => {
+  it('ignores entry edits, the remove-after-draw toggle, Preset changes and imports until the spin ends', () => {
+    const env = createTestEnv({ random: [0, 0] });
+    const wheel = wheelWith(env, [
+      { label: 'a', weight: 1 },
+      { label: 'b', weight: 1 },
+    ]);
+    const file = wheel.exportSettings();
+    const first = wheel.getState().selectedPresetId!;
+    wheel.createPreset('Other');
+    const other = wheel.getState().selectedPresetId!;
+    const [a, b] = wheel.getState().entries;
+
+    wheel.spin();
+    const before = wheel.getState();
+    wheel.addEntry('c');
+    wheel.updateEntry(a!.id, { label: 'A', weight: 9 });
+    wheel.removeEntry(b!.id);
+    wheel.setRemoveAfterDraw(true);
+    wheel.selectPreset(first);
+    wheel.deletePreset(other);
+    wheel.createPreset('Third');
+    expect(wheel.importSettings(file)).toBe(false);
+    expect(wheel.getState()).toMatchObject({
+      entries: before.entries,
+      removeAfterDraw: false,
+      selectedPresetId: other,
+      presets: before.presets,
+      animating: true,
+    });
+
+    wheel.finishAnimation();
+    wheel.addEntry('c');
+    expect(labels(wheel.getState().entries)).toEqual(['a', 'b', 'c']);
+  });
+});
+
 function spinAndFinish(wheel: WheelController) {
   wheel.spin();
   wheel.finishAnimation();
+}
+
+function labels(entries: { label: string }[]) {
+  return entries.map((entry) => entry.label);
 }

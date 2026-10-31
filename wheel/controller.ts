@@ -5,6 +5,7 @@ import {
   type SettingsSchema,
   type SettingsStoreOptions,
   createSettingsStore,
+  isPlainObject,
   serializeSettings,
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
@@ -103,7 +104,7 @@ export interface WheelController {
   subscribe(listener: (state: WheelState) => void): () => void;
   /** Adds an entry with weight 1 and the next palette color; ignored at MAX_ENTRIES. */
   addEntry(label: string): void;
-  /** Changes an entry's label, weight or color; invalid changes are ignored. */
+  /** Changes an entry's label, weight or color; invalid changes are ignored. Entry edits are ignored while animating. */
   updateEntry(id: string, changes: Partial<Omit<WheelEntry, 'id'>>): void;
   /** The last remaining entry cannot be removed. */
   removeEntry(id: string): void;
@@ -115,29 +116,39 @@ export interface WheelController {
   finishAnimation(): void;
   /** Clears the Outcome, history and drawn entries (entries are kept); ignored while animating. */
   reset(): void;
+  /** Ignored while animating. */
   setRemoveAfterDraw(on: boolean): void;
   /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
   setSound(next: Partial<SoundSettings>): void;
   /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
   setAnimationDuration(ms: number): void;
   setAlwaysFullAnimation(always: boolean): void;
-  /** Saves the current Settings as a new Preset and switches to it. */
+  /** Saves the current Settings as a new Preset (with nothing drawn yet) and switches to it; ignored while animating. */
   createPreset(name: string): void;
+  /** Ignored while animating. */
   selectPreset(id: string): void;
   renamePreset(id: string, name: string): void;
-  /** The last remaining Preset cannot be deleted. */
+  /** The last remaining Preset cannot be deleted; ignored while animating. */
   deletePreset(id: string): void;
   /** A Share link to this page carrying the Settings in effect. */
   shareLink(options?: ShareLinkOptions): string;
   /** JSON backup of every Preset. */
   exportSettings(): string;
-  /** Replaces all Presets from an export file; returns false and changes nothing if it is invalid. */
+  /** Replaces all Presets from an export file; returns false and changes nothing if it is invalid or while animating. */
   importSettings(text: string): boolean;
 }
 
 /** Storage key of the State (drawn entries), separate from the Settings. */
 export const WHEEL_STATE_KEY = 'mywidgetbox:wheel:state';
-const STATE_VERSION = 1;
+const STATE_VERSION = 2;
+
+/**
+ * Drawn entries are kept per Preset (and one scope for Settings opened from a Share link),
+ * so entry ids reused in another Preset never show as drawn there.
+ */
+function drawnScope(selectedPresetId: string | null): string {
+  return selectedPresetId === null ? 'shared' : `preset:${selectedPresetId}`;
+}
 
 export const MAX_ENTRIES = 100;
 export const MAX_LABEL_LENGTH = 100;
@@ -244,37 +255,71 @@ export function createWheelController(
   settingsOptions: SettingsStoreOptions = { readUrl: readShareLinkSettings },
 ): WheelController {
   const settings = createSettingsStore(env, wheelSettingsSchema, settingsOptions);
-  let drawn: string[] = loadDrawn();
+  /** Drawn entry ids by scope (see drawnScope). */
+  let drawnByScope: Record<string, string[]> = readDrawn() ?? {};
+  let drawn: string[] = drawnByScope[scope()] ?? [];
   let lastRemaining: WheelEntry[] = [];
   let state: WheelState = { ...fromSettings(), outcome: null, history: [], animating: false };
   const listeners = new Set<(state: WheelState) => void>();
 
-  function loadDrawn(): string[] {
+  function scope() {
+    return drawnScope(settings.getSnapshot().selectedPresetId);
+  }
+
+  /** The stored draws; null if storage cannot be read at all (then the in-memory ones stay). */
+  function readDrawn(): Record<string, string[]> | null {
+    let raw: string | null;
     try {
-      const data = JSON.parse(env.storage.getItem(WHEEL_STATE_KEY) ?? 'null') as { version?: unknown; drawn?: unknown } | null;
-      if (data?.version !== STATE_VERSION || !Array.isArray(data.drawn)) return [];
-      return data.drawn.filter((id): id is string => typeof id === 'string');
+      raw = env.storage.getItem(WHEEL_STATE_KEY);
     } catch {
-      return [];
+      return null;
+    }
+    try {
+      const data: unknown = JSON.parse(raw ?? 'null');
+      if (!isPlainObject(data)) return {};
+      // Version 1 kept one list; it belonged to whatever Settings were in effect.
+      if (data.version === 1) return Array.isArray(data.drawn) ? { [scope()]: ids(data.drawn) } : {};
+      if (data.version !== STATE_VERSION || !isPlainObject(data.scopes)) return {};
+      return Object.fromEntries(
+        Object.entries(data.scopes).flatMap(([key, list]) => (Array.isArray(list) ? [[key, ids(list)]] : [])),
+      );
+    } catch {
+      return {};
     }
   }
 
-  function setDrawn(next: string[]) {
-    drawn = next;
+  /** Changes the drawn entries of the Settings in effect, re-reading storage first so draws made meanwhile in another tab survive. */
+  function setDrawn(change: (current: string[]) => string[]) {
+    const key = scope();
+    const current = readDrawn() ?? drawnByScope;
+    drawnByScope = { ...current, [key]: change(current[key] ?? []) };
+    drawn = drawnByScope[key]!;
+    writeDrawn();
+  }
+
+  function writeDrawn() {
     try {
-      env.storage.setItem(WHEEL_STATE_KEY, JSON.stringify({ version: STATE_VERSION, drawn }));
+      env.storage.setItem(WHEEL_STATE_KEY, JSON.stringify({ version: STATE_VERSION, scopes: drawnByScope }));
     } catch {
       // Storage full or unavailable: keep working from memory.
     }
   }
 
+  // Another tab drew or reset. Mid-spin the wheel must not change; finishAnimation catches up.
+  env.onStorageChange((key) => {
+    if ((key !== WHEEL_STATE_KEY && key !== null) || state.animating) return;
+    drawnByScope = readDrawn() ?? drawnByScope;
+    update(fromSettings());
+  });
+
   /** The Settings in effect plus the drawn State, reconciled with them. */
   function fromSettings() {
     const { settings: current, presets, selectedPresetId } = settings.getSnapshot();
     const { entries, removeAfterDraw } = current;
+    drawn = drawnByScope[scope()] ?? [];
     // Entries removed from the Settings (edits, Preset switch, import) are dropped from the State.
-    const ids = new Set(entries.map((entry) => entry.id));
-    if (drawn.some((id) => !ids.has(id))) setDrawn(drawn.filter((id) => ids.has(id)));
+    const known = new Set(entries.map((entry) => entry.id));
+    if (drawn.some((id) => !known.has(id))) setDrawn((list) => list.filter((id) => known.has(id)));
     const remaining = removeAfterDraw ? entries.filter((entry) => !drawn.includes(entry.id)) : entries;
     // Keep the same array while nothing changed, so the view redraws the wheel only when needed.
     const same = remaining.length === lastRemaining.length && remaining.every((entry, i) => entry === lastRemaining[i]);
@@ -309,8 +354,9 @@ export function createWheelController(
     changeSettings(() => settings.update({ ...settings.getSnapshot().settings, ...next }));
   }
 
+  /** Entries are fixed while the wheel spins, so the Outcome always matches what is shown. */
   function setEntries(entries: WheelEntry[]) {
-    if (isEntryList(entries)) updateSettings({ entries });
+    if (!state.animating && isEntryList(entries)) updateSettings({ entries });
   }
 
   function setAnimation(next: Partial<AnimationSettings>) {
@@ -352,15 +398,17 @@ export function createWheelController(
     finishAnimation() {
       if (!state.animating) return;
       const id = state.outcome?.entryId;
-      if (state.removeAfterDraw && id !== undefined && !drawn.includes(id)) setDrawn([...drawn, id]);
+      if (state.removeAfterDraw && id !== undefined) setDrawn((list) => (list.includes(id) ? list : [...list, id]));
       update({ ...fromSettings(), animating: false });
     },
     reset() {
       if (state.animating) return;
-      setDrawn([]);
+      setDrawn(() => []);
       update({ ...fromSettings(), outcome: null, history: [] });
     },
-    setRemoveAfterDraw: (removeAfterDraw) => updateSettings({ removeAfterDraw }),
+    setRemoveAfterDraw(removeAfterDraw) {
+      if (!state.animating) updateSettings({ removeAfterDraw });
+    },
     setSound(next) {
       const sound = { ...settings.getSnapshot().settings.sound, ...next };
       if (isSoundSettings(sound)) updateSettings({ sound });
@@ -369,19 +417,36 @@ export function createWheelController(
       if (isValidDuration(ms)) setAnimation({ duration: ms });
     },
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
-    createPreset: (name) => changeSettings(() => settings.createPreset(name)),
-    selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
+    createPreset(name) {
+      if (state.animating) return;
+      settings.createPreset(name);
+      // A new Preset starts with nothing drawn (its id may have belonged to a deleted Preset).
+      setDrawn(() => []);
+      update(fromSettings());
+    },
+    selectPreset(id) {
+      if (!state.animating) changeSettings(() => settings.selectPreset(id));
+    },
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
-    deletePreset: (id) => changeSettings(() => settings.deletePreset(id)),
+    deletePreset(id) {
+      if (!state.animating) changeSettings(() => settings.deletePreset(id));
+    },
     shareLink: (options) =>
       createShareLink(env.url, serializeSettings(wheelSettingsSchema, settings.getSnapshot().settings), options),
     exportSettings: () => settings.exportFile(),
     importSettings(text) {
-      if (!settings.importFile(text)) return false;
+      if (state.animating || !settings.importFile(text)) return false;
+      // The imported Presets replace all others; none of the old draws belong to them.
+      drawnByScope = {};
+      writeDrawn();
       update(fromSettings());
       return true;
     },
   };
+}
+
+function ids(list: unknown[]): string[] {
+  return list.filter((id): id is string => typeof id === 'string');
 }
 
 /** How the view should animate a spin, given whether the system asks for reduced motion. */
