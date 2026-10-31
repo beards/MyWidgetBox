@@ -88,7 +88,7 @@ body {
 .dice__presets,
 .dice__add,
 .dice__modifier,
-.dice__duration,
+.dice__skip-animation,
 .dice__full-animation,
 .dice__sound {
   display: flex;
@@ -200,7 +200,6 @@ body {
 
 .dice__presets,
 .dice__add,
-.dice__duration,
 .dice__share-copy {
   flex-wrap: wrap;
 }

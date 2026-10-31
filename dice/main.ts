@@ -10,11 +10,14 @@ import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundIn
 import {
   DIE_SIDES,
   MAX_DICE_PER_KIND,
+  TABLE_FINISHES,
   type DiceAppearance,
   type DiceOutcome,
   type DiceSet,
   type DiceState,
   type DieSides,
+  type TableFinish,
+  TABLE_BOUNCE_MAX,
   animationFor,
   createDiceController,
   formatOutcome,
@@ -33,6 +36,7 @@ bindStaticText(i18n);
 mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
 const t = i18n.t;
 const dieLabel = (sides: number) => t('dieLabel', { sides });
+const FINISH_LABELS = { felt: 'finishFelt', wood: 'finishWood', plain: 'finishPlain' } as const;
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const die = $<HTMLButtonElement>('#die');
@@ -44,8 +48,7 @@ const addButton = $<HTMLButtonElement>('#add-die');
 const modifierInput = $<HTMLInputElement>('#modifier');
 const historyList = $<HTMLOListElement>('#history');
 const resetButton = $<HTMLButtonElement>('#reset');
-const durationInput = $<HTMLInputElement>('#duration');
-const durationValue = $<HTMLOutputElement>('#duration-value');
+const skipInput = $<HTMLInputElement>('#skip-animation');
 const alwaysFullInput = $<HTMLInputElement>('#always-full');
 const shakeInput = $<HTMLInputElement>('#shake-to-roll');
 const shakeStatus = $('#shake-status');
@@ -61,12 +64,15 @@ const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelec
   fields: [
     { key: 'dieColor', label: () => t('dieColor') },
     { key: 'pipColor', label: () => t('pipColor') },
+    { key: 'tableColor', label: () => t('tableColor') },
   ],
   onChange(appearance) {
     dice.setAppearance(appearance);
     appearancePanel.update(dice.getState().appearance);
   },
 });
+const tableFinishInput = mountTableFinish(document.querySelector<HTMLElement>('#appearance')!);
+const tableBounce = mountTableBounce(document.querySelector<HTMLElement>('#appearance')!);
 const presetPanel = mountPresetPanel(dice, i18n);
 const sharePanel = mountSharePanel(i18n, (options) => dice.shareLink(options));
 mountSettingsFilePanel(i18n, {
@@ -74,7 +80,7 @@ mountSettingsFilePanel(i18n, {
   exportSettings: () => dice.exportSettings(),
   importSettings: (text) => dice.importSettings(text),
 });
-const soundInputs = mountSoundInputs(dice, sound, 'diceLand');
+const soundInputs = mountSoundInputs(dice, sound, 'diceHit');
 
 function renderAddSides() {
   const selected = addSides.value || '20';
@@ -87,24 +93,36 @@ function render(state: DiceState) {
   const { diceSet, appearance, outcome, history, animating } = state;
   applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
   scene.setColors({ body: appearance.dieColor, label: appearance.pipColor });
+  // With a transparent background only the dice and their shadows show (e.g. over a stream in OBS).
+  const transparent = displayOptions.transparent || appearance.background.kind === 'transparent';
+  scene.setTable({ color: appearance.tableColor, finish: appearance.tableFinish, visible: !transparent });
   appearancePanel.update(appearance);
+  tableFinishInput.value = appearance.tableFinish;
+  if (document.activeElement !== tableBounce.input) tableBounce.input.value = String(appearance.tableBounce);
+  tableBounce.value.textContent = formatBounce(appearance.tableBounce);
 
   presetPanel.update(state);
 
-  if (animating && outcome && outcome !== playing) {
+  // Every new Outcome is played once; a skipped animation is already finished in the controller.
+  if (outcome && outcome !== playing) {
     playing = outcome;
-    scene.play(outcome.rolls, animationFor(state, reducedMotion.matches), () => {
-      sound.play('diceLand', dice.getState().sound);
-      dice.finishAnimation();
-    });
+    scene.play(
+      outcome.rolls,
+      { animation: animationFor(state, reducedMotion.matches), bounce: appearance.tableBounce },
+      () => dice.finishAnimation(),
+      // Each impact is as loud as it was hard, relative to the volume setting.
+      (volume) => {
+        const settings = dice.getState().sound;
+        sound.play('diceHit', { ...settings, volume: settings.volume * volume });
+      },
+    );
   } else if (!animating) {
     scene.show(outcome ? outcome.rolls : restingDice(diceSet));
   }
   // The Outcome is revealed once the dice have landed.
   breakdown.textContent = outcome && !animating ? formatOutcome(outcome) : '';
   modifierInput.value = String(diceSet.modifier);
-  durationInput.value = String(state.animationDuration / 1000);
-  durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
+  skipInput.checked = state.skipAnimation;
   alwaysFullInput.checked = state.alwaysFullAnimation;
   soundInputs.update(state.sound);
   shakeInput.checked = state.shakeToRoll;
@@ -145,6 +163,55 @@ function render(state: DiceState) {
       return item;
     }),
   );
+}
+
+/** The table bounce slider (0..TABLE_BOUNCE_MAX), added to the appearance panel after the table finish. */
+function mountTableBounce(container: HTMLElement): { input: HTMLInputElement; value: HTMLOutputElement } {
+  const label = document.createElement('label');
+  const text = document.createElement('span');
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.min = '0';
+  input.max = String(TABLE_BOUNCE_MAX);
+  input.step = '0.05';
+  input.value = String(dice.getState().appearance.tableBounce);
+  // The current value, shown to the right of the slider.
+  const value = document.createElement('output');
+  value.textContent = formatBounce(dice.getState().appearance.tableBounce);
+  const relabel = () => (text.textContent = t('tableBounce'));
+  relabel();
+  i18n.subscribe(relabel);
+  input.addEventListener('input', () =>
+    dice.setAppearance({ ...dice.getState().appearance, tableBounce: Number(input.value) }),
+  );
+  label.append(text, input, value);
+  container.append(label);
+  return { input, value };
+}
+
+function formatBounce(bounce: number): string {
+  return bounce.toFixed(2);
+}
+
+/** The table finish choice, added to the appearance panel after its color items. */
+function mountTableFinish(container: HTMLElement): HTMLSelectElement {
+  const label = document.createElement('label');
+  const text = document.createElement('span');
+  const select = document.createElement('select');
+  const relabel = () => {
+    text.textContent = t('tableFinish');
+    const selected = select.value;
+    select.replaceChildren(...TABLE_FINISHES.map((finish) => new Option(t(FINISH_LABELS[finish]), finish)));
+    select.value = selected || dice.getState().appearance.tableFinish;
+  };
+  relabel();
+  i18n.subscribe(relabel);
+  select.addEventListener('change', () =>
+    dice.setAppearance({ ...dice.getState().appearance, tableFinish: select.value as TableFinish }),
+  );
+  label.append(text, select);
+  container.append(label);
+  return select;
 }
 
 /** three.js throws when no WebGL context can be created; the dice then roll as flat tiles. */
@@ -245,7 +312,7 @@ rollButton.addEventListener('click', () => dice.roll());
 addButton.addEventListener('click', () => dice.addDie(Number(addSides.value) as DieSides));
 modifierInput.addEventListener('change', () => edit(() => dice.setModifier(Number(modifierInput.value))));
 resetButton.addEventListener('click', () => dice.reset());
-durationInput.addEventListener('input', () => dice.setAnimationDuration(Number(durationInput.value) * 1000));
+skipInput.addEventListener('change', () => dice.setSkipAnimation(skipInput.checked));
 alwaysFullInput.addEventListener('change', () => dice.setAlwaysFullAnimation(alwaysFullInput.checked));
 
 shakeInput.addEventListener('change', () => {

@@ -1,13 +1,4 @@
 import { type Appearance, appearanceDefaults, isAppearance, isHexColor } from '../shared/appearance';
-import {
-  type AnimationSettings,
-  MAX_ANIMATION_DURATION,
-  MIN_ANIMATION_DURATION,
-  REDUCED_MOTION_DURATION,
-  animationFor,
-  isAnimationDuration,
-  isAnimationSettings,
-} from '../shared/animation';
 import type { Env } from '../shared/env';
 import { randomBelow } from '../shared/random';
 import {
@@ -19,9 +10,6 @@ import {
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
 import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
-
-// Part of this controller's interface (the view and tests use them from here).
-export { type AnimationSettings, MAX_ANIMATION_DURATION, MIN_ANIMATION_DURATION, REDUCED_MOTION_DURATION, animationFor };
 
 export const DIE_SIDES = [4, 6, 8, 10, 12, 20, 100] as const;
 export type DieSides = (typeof DIE_SIDES)[number];
@@ -56,13 +44,56 @@ export interface DiceAppearance extends Appearance {
   dieColor: string;
   /** `#rrggbb` color of the pips / face numbers. */
   pipColor: string;
+  /** `#rrggbb` color of the table the dice are thrown onto (hidden with a transparent background). */
+  tableColor: string;
+  tableFinish: TableFinish;
+  /** How bouncy the table is, 0 (dead) .. TABLE_BOUNCE_MAX; only changes how the roll is staged. */
+  tableBounce: number;
 }
+
+/**
+ * How a roll is animated. The physics has one natural length, so unlike the wheel there is no
+ * animation length; the dice can only skip the animation or ignore the system's reduced motion.
+ */
+export interface DiceAnimationSettings {
+  /** Show the dice at rest on the Outcome at once (no fall, no impact sounds); wins over everything else. */
+  skip: boolean;
+  /** Play the full animation even when the system asks for reduced motion. */
+  alwaysFull: boolean;
+}
+
+/** 'full': the physics roll; 'reduced': a quick reveal; 'skip': the dice are shown at rest at once. */
+export type DiceAnimation = 'full' | 'reduced' | 'skip';
+
+/** How the view should animate a roll, given the animation Settings in effect and the system's reduced motion. */
+export function animationFor(
+  { skipAnimation, alwaysFullAnimation }: { skipAnimation: boolean; alwaysFullAnimation: boolean },
+  prefersReducedMotion: boolean,
+): DiceAnimation {
+  if (skipAnimation) return 'skip';
+  return prefersReducedMotion && !alwaysFullAnimation ? 'reduced' : 'full';
+}
+
+function isDiceAnimationSettings(value: unknown): value is DiceAnimationSettings {
+  const { skip, alwaysFull } = (value ?? {}) as Partial<DiceAnimationSettings>;
+  return typeof skip === 'boolean' && typeof alwaysFull === 'boolean';
+}
+
+/**
+ * Highest table bounce. Above 1 the table gives back more than it takes (restitution over 1), so the dice
+ * bounce higher and higher until the wind-down damping stops them.
+ */
+export const TABLE_BOUNCE_MAX = 1.5;
+
+/** Surface textures of the table, tinted with tableColor. */
+export const TABLE_FINISHES = ['felt', 'wood', 'plain'] as const;
+export type TableFinish = (typeof TABLE_FINISHES)[number];
 
 /** What the dice remember and share; one value per Preset. Add new fields with defaults here. */
 export interface DiceSettings {
   diceSet: DiceSet;
   appearance: DiceAppearance;
-  animation: AnimationSettings;
+  animation: DiceAnimationSettings;
   /** Played when the dice land. */
   sound: SoundSettings;
   /** Roll by shaking the phone (off by default; needs motion permission on iOS). */
@@ -80,10 +111,10 @@ export interface DiceState {
   outcome: DiceOutcome | null;
   /** The most recent Outcomes, newest first, at most HISTORY_LIMIT; kept in memory only. */
   history: DiceOutcome[];
-  /** True from a roll until the view reports its animation finished; rolls are ignored meanwhile. */
+  /** True from a roll until the view reports its animation finished (never with skipAnimation); rolls are ignored meanwhile. */
   animating: boolean;
-  /** The animation Settings in effect (see AnimationSettings). */
-  animationDuration: number;
+  /** The animation Settings in effect (see DiceAnimationSettings). */
+  skipAnimation: boolean;
   alwaysFullAnimation: boolean;
   /** The sound Settings in effect; the view plays the landing sound with them. */
   sound: SoundSettings;
@@ -110,8 +141,8 @@ export interface DiceController {
   finishAnimation(): void;
   /** Clears the Outcome and history (the dice set is kept); ignored while animating. */
   reset(): void;
-  /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
-  setAnimationDuration(ms: number): void;
+  /** With the animation skipped, a roll is finished at once (animating stays false). */
+  setSkipAnimation(skip: boolean): void;
   setAlwaysFullAnimation(always: boolean): void;
   /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
   setSound(next: Partial<SoundSettings>): void;
@@ -139,22 +170,38 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
   // Fields added later need no version bump: missing ones are filled from these defaults.
   defaults: {
     diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
-    animation: { duration: 3000, alwaysFull: false },
+    animation: { skip: false, alwaysFull: false },
     sound: soundDefaults,
     shakeToRoll: false,
-    appearance: { ...appearanceDefaults, dieColor: '#f7f3e8', pipColor: '#1f1f1f' },
+    appearance: {
+      ...appearanceDefaults,
+      dieColor: '#f7f3e8',
+      pipColor: '#1f1f1f',
+      tableColor: '#2e6b4f',
+      tableFinish: 'felt',
+      tableBounce: 0.6,
+    },
   },
   isValid: (settings): settings is DiceSettings =>
     isDiceSet((settings as DiceSettings).diceSet) &&
-    isAnimationSettings((settings as DiceSettings).animation) &&
+    isDiceAnimationSettings((settings as DiceSettings).animation) &&
     isSoundSettings((settings as DiceSettings).sound) &&
     typeof (settings as DiceSettings).shakeToRoll === 'boolean' &&
     isDiceAppearance((settings as DiceSettings).appearance),
 };
 
 function isDiceAppearance(value: unknown): value is DiceAppearance {
-  const { dieColor, pipColor } = (value ?? {}) as Partial<DiceAppearance>;
-  return isAppearance(value) && isHexColor(dieColor) && isHexColor(pipColor);
+  const { dieColor, pipColor, tableColor, tableFinish, tableBounce } = (value ?? {}) as Partial<DiceAppearance>;
+  return (
+    isAppearance(value) &&
+    isHexColor(dieColor) &&
+    isHexColor(pipColor) &&
+    isHexColor(tableColor) &&
+    TABLE_FINISHES.includes(tableFinish as TableFinish) &&
+    typeof tableBounce === 'number' &&
+    tableBounce >= 0 &&
+    tableBounce <= TABLE_BOUNCE_MAX
+  );
 }
 
 function isDiceSet(value: unknown): value is DiceSet {
@@ -196,7 +243,7 @@ export function createDiceController(
     return {
       diceSet: current.diceSet,
       appearance: current.appearance,
-      animationDuration: current.animation.duration,
+      skipAnimation: current.animation.skip,
       alwaysFullAnimation: current.animation.alwaysFull,
       sound: current.sound,
       shakeToRoll: current.shakeToRoll,
@@ -224,7 +271,7 @@ export function createDiceController(
     updateSettings({ diceSet });
   }
 
-  function setAnimation(next: Partial<AnimationSettings>) {
+  function setAnimation(next: Partial<DiceAnimationSettings>) {
     updateSettings({ animation: { ...settings.getSnapshot().settings.animation, ...next } });
   }
 
@@ -273,7 +320,7 @@ export function createDiceController(
       );
       const total = rolls.reduce((sum, roll) => sum + roll.value, modifier);
       const outcome = { rolls, modifier, total };
-      update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT), animating: true });
+      update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT), animating: !state.skipAnimation });
     },
     finishAnimation() {
       if (state.animating) update({ animating: false });
@@ -281,9 +328,7 @@ export function createDiceController(
     reset() {
       if (!state.animating) update({ outcome: null, history: [] });
     },
-    setAnimationDuration(ms) {
-      if (isAnimationDuration(ms)) setAnimation({ duration: ms });
-    },
+    setSkipAnimation: (skip) => setAnimation({ skip }),
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
     setSound(next) {
       const sound = { ...settings.getSnapshot().settings.sound, ...next };

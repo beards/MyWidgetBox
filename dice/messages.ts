@@ -5,8 +5,7 @@ export type DiceMessageKey =
   | 'title'
   | 'roll'
   | 'reset'
-  | 'animationDuration'
-  | 'seconds'
+  | 'skipAnimation'
   | 'alwaysFullAnimation'
   | 'sound'
   | 'soundEnabled'
@@ -42,7 +41,13 @@ export type DiceMessageKey =
   | 'importSettings'
   | 'importError'
   | 'dieColor'
-  | 'pipColor';
+  | 'pipColor'
+  | 'tableColor'
+  | 'tableFinish'
+  | 'tableBounce'
+  | 'finishFelt'
+  | 'finishWood'
+  | 'finishPlain';
 
 export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
   en: {
@@ -50,11 +55,10 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     title: 'Dice · MyWidgetBox',
     roll: 'Roll',
     reset: 'Reset',
-    animationDuration: 'Animation length',
-    seconds: '{seconds} s',
+    skipAnimation: 'Skip animation',
     alwaysFullAnimation: 'Always play the full animation (ignore reduced motion)',
     sound: 'Sound',
-    soundEnabled: 'Play a sound when the dice land',
+    soundEnabled: 'Play a sound when the dice hit the table and each other',
     soundVolume: 'Volume',
     soundUrl: 'Custom sound URL (empty = built-in)',
     shakeToRoll: 'Shake the phone to roll',
@@ -88,17 +92,22 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     importError: 'This file could not be imported. Your Settings were not changed.',
     dieColor: 'Die color',
     pipColor: 'Pip color',
+    tableColor: 'Table color',
+    tableFinish: 'Table surface',
+    tableBounce: 'Table bounce',
+    finishFelt: 'Felt',
+    finishWood: 'Wood',
+    finishPlain: 'Plain',
   },
   'zh-Hant': {
     ...appearanceMessages['zh-Hant'],
     title: '骰子 · MyWidgetBox',
     roll: '擲骰',
     reset: '重置',
-    animationDuration: '動畫長度',
-    seconds: '{seconds} 秒',
+    skipAnimation: '略過動畫',
     alwaysFullAnimation: '永遠播放完整動畫（忽略「減少動態效果」）',
     sound: '音效',
-    soundEnabled: '骰子落地時播放音效',
+    soundEnabled: '骰子撞到桌面和彼此時播放音效',
     soundVolume: '音量',
     soundUrl: '自訂音效網址（留空＝內建音效）',
     shakeToRoll: '搖手機擲骰',
@@ -132,5 +141,11 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     importError: '無法匯入此檔案，現有 Settings 未變更。',
     dieColor: '骰子顏色',
     pipColor: '點數顏色',
+    tableColor: '桌面顏色',
+    tableFinish: '桌面質感',
+    tableBounce: '桌面彈性',
+    finishFelt: '絨布',
+    finishWood: '木紋',
+    finishPlain: '素面',
   },
 };

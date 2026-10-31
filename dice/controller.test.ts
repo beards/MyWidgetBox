@@ -8,7 +8,7 @@ import {
   type DiceAppearance,
   type DiceController,
   type DieSides,
-  REDUCED_MOTION_DURATION,
+  TABLE_FINISHES,
   animationFor,
   createDiceController,
   formatOutcome,
@@ -215,39 +215,41 @@ describe('dice controller', () => {
     expect(dice.getState().animating).toBe(true);
   });
 
-  it('plays a full-length animation of the chosen duration', () => {
+  it('plays the full animation by default', () => {
     const dice = createDiceController(createTestEnv());
-    expect(animationFor(dice.getState(), false)).toEqual({ duration: 3000, reduced: false });
-
-    dice.setAnimationDuration(7500);
-    expect(animationFor(dice.getState(), false)).toEqual({ duration: 7500, reduced: false });
+    expect(dice.getState()).toMatchObject({ skipAnimation: false, alwaysFullAnimation: false });
+    expect(animationFor(dice.getState(), false)).toBe('full');
   });
 
-  it('keeps the animation duration between 1 and 10 seconds', () => {
+  it('shows a quick reveal when the system asks for reduced motion', () => {
     const dice = createDiceController(createTestEnv());
-    dice.setAnimationDuration(999);
-    dice.setAnimationDuration(10_001);
-    dice.setAnimationDuration(Number.NaN);
-    expect(dice.getState().animationDuration).toBe(3000);
-    dice.setAnimationDuration(1000);
-    expect(dice.getState().animationDuration).toBe(1000);
-    dice.setAnimationDuration(10_000);
-    expect(dice.getState().animationDuration).toBe(10_000);
-  });
-
-  it('shortens the animation when the system asks for reduced motion', () => {
-    const dice = createDiceController(createTestEnv());
-    dice.setAnimationDuration(7500);
-    expect(animationFor(dice.getState(), true)).toEqual({ duration: REDUCED_MOTION_DURATION, reduced: true });
-    expect(REDUCED_MOTION_DURATION).toBeLessThan(1000);
+    expect(animationFor(dice.getState(), true)).toBe('reduced');
   });
 
   it('can be overridden to always play the full animation', () => {
     const dice = createDiceController(createTestEnv());
-    expect(dice.getState().alwaysFullAnimation).toBe(false);
-
     dice.setAlwaysFullAnimation(true);
-    expect(animationFor(dice.getState(), true)).toEqual({ duration: 3000, reduced: false });
+    expect(animationFor(dice.getState(), true)).toBe('full');
+  });
+
+  it('skipping the animation wins over reduced motion and the full-animation override', () => {
+    const dice = createDiceController(createTestEnv());
+    dice.setSkipAnimation(true);
+    expect(animationFor(dice.getState(), false)).toBe('skip');
+    expect(animationFor(dice.getState(), true)).toBe('skip');
+    dice.setAlwaysFullAnimation(true);
+    expect(animationFor(dice.getState(), true)).toBe('skip');
+  });
+
+  it('with the animation skipped, a roll is finished at once', () => {
+    const dice = createDiceController(createTestEnv({ random: [2, 4] }));
+    dice.setSkipAnimation(true);
+
+    dice.roll();
+    expect(dice.getState().animating).toBe(false);
+    expect(dice.getState().outcome!.total).toBe(3);
+    dice.roll();
+    expect(dice.getState().history.map((outcome) => outcome.total)).toEqual([5, 3]);
   });
 
   it('has sound on at a moderate volume with the built-in sound by default', () => {
@@ -320,15 +322,43 @@ describe('dice Settings persistence and Presets', () => {
     });
   });
 
-  it('remembers the animation length and the full-animation override after a reload', () => {
+  it('remembers the skip and full-animation options after a reload', () => {
     const env = createTestEnv();
     const before = createDiceController(env);
-    before.setAnimationDuration(6500);
+    before.setSkipAnimation(true);
     before.setAlwaysFullAnimation(true);
 
     const after = createDiceController(env);
-    expect(after.getState().animationDuration).toBe(6500);
+    expect(after.getState().skipAnimation).toBe(true);
     expect(after.getState().alwaysFullAnimation).toBe(true);
+  });
+
+  it('opens a Preset stored with the former animation length, dropping the length', () => {
+    const env = createTestEnv();
+    env.storage.setItem(
+      settingsStorageKey('dice'),
+      JSON.stringify({
+        version: 1,
+        presets: [
+          {
+            id: '1',
+            name: 'Old',
+            settings: { diceSet: { groups: [{ sides: 20, count: 2 }], modifier: 1 }, animation: { duration: 6500, alwaysFull: true } },
+          },
+        ],
+        selectedPresetId: '1',
+      }),
+    );
+
+    const dice = createDiceController(env);
+    expect(dice.getState().diceSet).toEqual({ groups: [{ sides: 20, count: 2 }], modifier: 1 });
+    expect(dice.getState()).toMatchObject({ skipAnimation: false, alwaysFullAnimation: true });
+    expect(dice.getState()).not.toHaveProperty('animationDuration');
+    dice.setModifier(2);
+    expect(JSON.parse(env.storage.getItem(settingsStorageKey('dice'))!).presets[0].settings.animation).toEqual({
+      skip: false,
+      alwaysFull: true,
+    });
   });
 
   it('remembers sound settings after a reload and per Preset', () => {
@@ -348,11 +378,11 @@ describe('dice Settings persistence and Presets', () => {
   it('keeps animation settings per Preset', () => {
     const dice = createDiceController(createTestEnv());
     const first = dice.getState().selectedPresetId!;
-    dice.createPreset('Slow');
-    dice.setAnimationDuration(9000);
+    dice.createPreset('Instant');
+    dice.setSkipAnimation(true);
 
     dice.selectPreset(first);
-    expect(dice.getState().animationDuration).toBe(3000);
+    expect(dice.getState().skipAnimation).toBe(false);
   });
 
   it.each(['{not json', '"text"', '{"version":1,"presets":[]}', '{"version":99,"presets":[{"id":"1","name":"","settings":{}}]}'])(
@@ -487,9 +517,12 @@ describe('dice appearance Settings', () => {
     scale: 1.5,
     dieColor: '#ff0000',
     pipColor: '#00ff00',
+    tableColor: '#5a3a20',
+    tableFinish: 'wood',
+    tableBounce: 0.9,
   };
 
-  it('opens with a solid white background, ivory dice with dark pips and no scaling', () => {
+  it('opens with a solid white background, ivory dice with dark pips on a green felt table and no scaling', () => {
     expect(createDiceController(createTestEnv()).getState().appearance).toEqual({
       background: { kind: 'solid', color: '#ffffff', imageUrl: '' },
       fontFamily: '',
@@ -498,7 +531,16 @@ describe('dice appearance Settings', () => {
       scale: 1,
       dieColor: '#f7f3e8',
       pipColor: '#1f1f1f',
+      tableColor: '#2e6b4f',
+      tableFinish: 'felt',
+      tableBounce: 0.6,
     });
+  });
+
+  it.each(TABLE_FINISHES)('offers a %s table finish', (tableFinish) => {
+    const dice = createDiceController(createTestEnv());
+    dice.setAppearance({ ...custom, tableFinish });
+    expect(dice.getState().appearance.tableFinish).toBe(tableFinish);
   });
 
   it('applies a new appearance and notifies subscribers', () => {
@@ -544,6 +586,11 @@ describe('dice appearance Settings', () => {
     ['an overlong font family', { fontFamily: 'x'.repeat(201) }],
     ['a die color that is not #rrggbb', { dieColor: '#fff' }],
     ['a missing pip color', { pipColor: undefined }],
+    ['a table color that is not #rrggbb', { tableColor: 'green' }],
+    ['an unknown table finish', { tableFinish: 'glass' }],
+    ['a table bounce above the maximum', { tableBounce: 1.55 }],
+    ['a negative table bounce', { tableBounce: -0.1 }],
+    ['a table bounce that is not a number', { tableBounce: '0.5' }],
   ])('ignores an appearance with %s', (_, change) => {
     const dice = createDiceController(createTestEnv());
     dice.setAppearance(custom);
@@ -581,6 +628,9 @@ describe('dice appearance Settings', () => {
     const partial: Partial<DiceAppearance> = { ...custom };
     delete partial.scale;
     delete partial.pipColor;
+    delete partial.tableColor;
+    delete partial.tableFinish;
+    delete partial.tableBounce;
     env.storage.setItem(
       settingsStorageKey('dice'),
       JSON.stringify({
@@ -590,7 +640,14 @@ describe('dice appearance Settings', () => {
       }),
     );
 
-    expect(createDiceController(env).getState().appearance).toEqual({ ...custom, scale: 1, pipColor: '#1f1f1f' });
+    expect(createDiceController(env).getState().appearance).toEqual({
+      ...custom,
+      scale: 1,
+      pipColor: '#1f1f1f',
+      tableColor: '#2e6b4f',
+      tableFinish: 'felt',
+      tableBounce: 0.6,
+    });
   });
 
   it('opens a Share link with the same appearance, without writing it to storage', () => {
@@ -630,11 +687,11 @@ describe('dice Share link', () => {
 
   it('carries the animation settings in a Share link', () => {
     const sharer = createDiceController(createTestEnv({ url: page }));
-    sharer.setAnimationDuration(1500);
+    sharer.setSkipAnimation(true);
     sharer.setAlwaysFullAnimation(true);
 
     const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
-    expect(opened.getState().animationDuration).toBe(1500);
+    expect(opened.getState().skipAnimation).toBe(true);
     expect(opened.getState().alwaysFullAnimation).toBe(true);
   });
 
@@ -699,8 +756,13 @@ describe('dice Share link', () => {
     });
     // Links from before the animation settings existed open with the default animation.
     expect(createDiceController(createTestEnv({ url: link })).getState()).toMatchObject({
-      animationDuration: 3000,
+      skipAnimation: false,
       alwaysFullAnimation: false,
+    });
+    // ...and links from before the table existed with the default table.
+    expect(createDiceController(createTestEnv({ url: link })).getState().appearance).toMatchObject({
+      tableColor: '#2e6b4f',
+      tableFinish: 'felt',
     });
   });
 

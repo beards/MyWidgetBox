@@ -2,8 +2,8 @@
 // request is needed; a Widget may let the user replace them with a sound URL.
 import { isHttpUrlOrEmpty } from './url';
 
-/** Built-in sounds: dice landing, a wheel tick, a timer alert. */
-export type BuiltInSound = 'diceLand' | 'tick' | 'alert';
+/** Built-in sounds: dice landing, one die hitting something (played per impact), a wheel tick, a timer alert. */
+export type BuiltInSound = 'diceLand' | 'diceHit' | 'tick' | 'alert';
 
 /** Sound part of a Widget's Settings, e.g. `DiceSettings.sound`. */
 export interface SoundSettings {
@@ -105,6 +105,10 @@ function synthesize(context: AudioContext, sound: BuiltInSound, volume: number) 
     noiseBurst(context, out, t, 0.06, 0.9, 2200);
     noiseBurst(context, out, t + 0.09, 0.04, 0.4, 2600);
     tone(context, out, t, 0.12, 0.5, 140, 'sine');
+  } else if (sound === 'diceHit') {
+    // One short clack with a little body.
+    noiseBurst(context, out, t, 0.045, 0.9, 2400);
+    tone(context, out, t, 0.06, 0.35, 190, 'sine');
   } else if (sound === 'tick') {
     tone(context, out, t, 0.025, 0.6, 1800, 'square');
   } else {

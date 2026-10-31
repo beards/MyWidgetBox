@@ -1,22 +1,21 @@
-import { Vector3 } from 'three';
+import { Quaternion, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIE_SIDES } from './controller';
-import { type BodySides, bodiesFor, dieShape, landingQuaternion } from './geometry';
+import { type BodySides, bodiesFor, dieShape, faceRemap, restingQuaternion, topReading } from './geometry';
 
 const BODY_SIDES: BodySides[] = [4, 6, 8, 10, 12, 20];
-const TOWARD_VIEWER = new Vector3(0, 0, 1);
-const SCREEN_UP = new Vector3(0, 1, 0);
+const UP = new Vector3(0, 1, 0);
 
 describe('dice geometry', () => {
   it.each(BODY_SIDES)('builds a d%i with one face per side', (sides) => {
     expect(dieShape(sides).faces).toHaveLength(sides);
   });
 
-  it.each(DIE_SIDES)('shows every d%i value on exactly one face of its bodies', (sides) => {
+  it.each(DIE_SIDES)('shows every d%i value on exactly one reading (face, or corner of a d4) of its bodies', (sides) => {
     for (let value = 1; value <= sides; value++) {
       for (const body of bodiesFor({ sides, value })) {
-        const faces = dieShape(body.sides, body.labels).faces.filter((face) => face.label === body.label);
-        expect(faces).toHaveLength(1);
+        const found = dieShape(body.sides, body.labels).readings.filter((reading) => reading.label === body.label);
+        expect(found).toHaveLength(1);
       }
     }
   });
@@ -30,16 +29,50 @@ describe('dice geometry', () => {
     expect(bodiesFor({ sides: 20, value: 17 })).toEqual([expect.objectContaining({ sides: 20, label: '17' })]);
   });
 
-  it.each(BODY_SIDES)('lands a d%i with the chosen face toward the viewer, upright', (sides) => {
-    const { faces } = dieShape(sides);
-    for (const face of faces) {
-      const rotation = landingQuaternion(face);
-      expect(face.normal.clone().applyQuaternion(rotation).distanceTo(TOWARD_VIEWER)).toBeLessThan(1e-9);
-      expect(face.up.clone().applyQuaternion(rotation).distanceTo(SCREEN_UP)).toBeLessThan(1e-9);
-      // No other face is turned further toward the viewer.
-      for (const other of faces) {
-        if (other !== face) expect(other.normal.clone().applyQuaternion(rotation).z).toBeLessThan(0.999);
+  it.each(BODY_SIDES)('relabels a landed d%i so its top shows any wanted label', (sides) => {
+    const shape = dieShape(sides);
+    const labels = shape.readings.map((reading) => reading.label);
+    for (let landed = 0; landed < labels.length; landed++) {
+      // Some orientation in which reading `landed` is on top, with an arbitrary turn about the vertical.
+      const pose = new Quaternion().setFromAxisAngle(UP, landed).multiply(restingQuaternion(shape, landed));
+      expect(topReading(shape, pose).label).toBe(labels[landed]);
+      for (const wanted of labels) {
+        const shown = pose.clone().multiply(faceRemap(shape, landed, wanted));
+        expect(topReading(shape, shown).label).toBe(wanted);
       }
     }
+  });
+
+  it.each(BODY_SIDES)('relabels a d%i with one of its own symmetries, so its shape does not change', (sides) => {
+    const shape = dieShape(sides);
+    const corners = shape.faces.flatMap((face) => face.triangles.flat());
+    for (const wanted of shape.readings.map((reading) => reading.label)) {
+      const remap = faceRemap(shape, 0, wanted);
+      for (const corner of corners) {
+        const moved = corner.clone().applyQuaternion(remap);
+        expect(Math.min(...corners.map((other) => other.distanceTo(moved)))).toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  it('reads a d4 at its top corner, like a real d4', () => {
+    const shape = dieShape(4);
+    expect(shape.readings).toHaveLength(4);
+    for (let index = 0; index < 4; index++) {
+      const pose = restingQuaternion(shape, index);
+      const corner = shape.readings[index]!.direction.clone().applyQuaternion(pose);
+      expect(corner.distanceTo(UP)).toBeLessThan(1e-9);
+      // It rests on the face opposite that corner.
+      expect(shape.faces.some((face) => face.normal.clone().applyQuaternion(pose).y < -1 + 1e-9)).toBe(true);
+    }
+  });
+
+  it.each(BODY_SIDES)('rests a d%i flat on the table with the chosen reading on top', (sides) => {
+    const shape = dieShape(sides);
+    shape.readings.forEach((reading, index) => {
+      const pose = restingQuaternion(shape, index);
+      expect(topReading(shape, pose).label).toBe(reading.label);
+      expect(shape.faces.some((face) => face.normal.clone().applyQuaternion(pose).y < -1 + 1e-9)).toBe(true);
+    });
   });
 });

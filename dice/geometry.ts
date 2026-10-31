@@ -1,5 +1,5 @@
 // Pure dice geometry (no DOM, no WebGL): polyhedron faces, their labels, and the
-// rotation that lands a chosen face toward the viewer. The 3D view builds on this.
+// orientations, readings and face remap the physics replay needs (ADR-0003). The 3D view builds on this.
 import {
   BoxGeometry,
   BufferGeometry,
@@ -31,9 +31,18 @@ export interface DieFace {
   triangles: Vector3[][];
 }
 
+/** Where a die is read when it rests: a face on top, or for a d4 the corner on top. */
+export interface Reading {
+  label: string;
+  /** Unit vector from the centre toward the face (its normal) or the corner, in die coordinates. */
+  direction: Vector3;
+}
+
 export interface DieShape {
   sides: BodySides;
   faces: DieFace[];
+  /** One per value; a d4 is read at its corners (its faces show the corner numbers), every other die at its faces. */
+  readings: Reading[];
 }
 
 /** One rendered die body and the face label it must land on. */
@@ -44,6 +53,9 @@ export interface DieBody {
 }
 
 const EPSILON = 1e-6;
+const UP = new Vector3(0, 1, 0);
+/** Table direction toward the top of the screen (the camera looks from +z), so resting labels read upright. */
+const SCREEN_UP_ON_TABLE = new Vector3(0, 0, -1);
 const TENS_LABELS = Array.from({ length: 10 }, (_, i) => `${i}0`);
 const UNITS_LABELS = Array.from({ length: 10 }, (_, i) => String(i));
 
@@ -65,6 +77,13 @@ export function bodiesFor({ sides, value }: DieRoll): DieBody[] {
 export function dieShape(sides: BodySides, labels: string[] = numberLabels(sides)): DieShape {
   const faces = groupFaces(triangles(sides));
   if (faces.length !== sides) throw new Error(`d${sides}: expected ${sides} faces, got ${faces.length}`);
+  if (sides === 4) {
+    // A d4 shows the number of the corner that points up; faces carry no label of their own.
+    faces.forEach((face) => (face.label = ''));
+    const corners = uniquePoints(faces.flatMap((face) => face.triangles.flat()));
+    const readings = corners.map((corner, index) => ({ label: labels[index]!, direction: corner.clone().normalize() }));
+    return { sides, faces: faces as DieFace[], readings };
+  }
   const assigned = new Set<UnlabeledFace>();
   let low = 0;
   let high = sides - 1;
@@ -78,14 +97,92 @@ export function dieShape(sides: BodySides, labels: string[] = numberLabels(sides
       assigned.add(opposite);
     }
   }
-  return { sides, faces: faces as DieFace[] };
+  const labeled = faces as DieFace[];
+  return { sides, faces: labeled, readings: labeled.map((face) => ({ label: face.label, direction: face.normal })) };
 }
 
-/** Rotation that turns this face toward the viewer (+z) with its label upright (+y). */
-export function landingQuaternion(face: DieFace): Quaternion {
-  const right = face.up.clone().cross(face.normal);
-  const basis = new Matrix4().makeBasis(right, face.up, face.normal);
-  return new Quaternion().setFromRotationMatrix(basis.transpose());
+/** The reading pointing most upward (+y) when the die has this orientation. */
+export function topReading(shape: DieShape, orientation: Quaternion): Reading & { index: number } {
+  let best = 0;
+  let bestHeight = -Infinity;
+  shape.readings.forEach((reading, index) => {
+    const height = reading.direction.clone().applyQuaternion(orientation).y;
+    if (height > bestHeight) {
+      best = index;
+      bestHeight = height;
+    }
+  });
+  return { ...shape.readings[best]!, index: best };
+}
+
+/** Orientation resting the die flat on the table (+y up) with reading `index` on top; face labels read upright on screen. */
+export function restingQuaternion(shape: DieShape, index: number): Quaternion {
+  const reading = shape.readings[index]!;
+  const face = shape.faces.find((candidate) => candidate.normal === reading.direction);
+  // A d4 corner: any direction across it will do.
+  const across = face ? face.up : perpendicular(reading.direction, cornerPoints(shape));
+  return rotationBetween([reading.direction, across], [UP, SCREEN_UP_ON_TABLE]);
+}
+
+/**
+ * The face remap (ADR-0003): a rotation of the die onto itself that brings the reading labelled `wanted`
+ * to where reading `landed` is. Drawing the die turned by it (orientation * remap) leaves its shape
+ * exactly where the physics put it, but shows `wanted` on top instead of what landed there.
+ */
+export function faceRemap(shape: DieShape, landed: number, wanted: string): Quaternion {
+  const from = shape.readings.find((reading) => reading.label === wanted)?.direction;
+  if (!from) throw new Error(`d${shape.sides} has no reading ${wanted}`);
+  const to = shape.readings[landed]!.direction;
+  const points = cornerPoints(shape);
+  // A corner off the axis fixes the rest of the rotation: try every corner it could be mapped to.
+  const reference = points.reduce((best, point) =>
+    point.clone().cross(from).length() > best.clone().cross(from).length() ? point : best,
+  );
+  for (const candidate of points) {
+    if (Math.abs(candidate.length() - reference.length()) > EPSILON) continue;
+    if (Math.abs(candidate.dot(to) - reference.dot(from)) > EPSILON) continue;
+    const rotation = rotationBetween([from, perpendicular(from, [reference])], [to, perpendicular(to, [candidate])]);
+    const isSymmetry = points.every((point) => {
+      const moved = point.clone().applyQuaternion(rotation);
+      return points.some((other) => other.distanceTo(moved) < 1e-5);
+    });
+    if (isSymmetry) return rotation;
+  }
+  throw new Error(`d${shape.sides}: no symmetry maps ${wanted} onto reading ${landed}`);
+}
+
+/** Convex hull for the physics engine: unique corners and each face's corner indices, counter-clockwise seen from outside. */
+export function dieHull(shape: DieShape): { vertices: Vector3[]; faces: number[][] } {
+  const vertices = cornerPoints(shape);
+  const faces = shape.faces.map((face) => {
+    const side = face.normal.clone().cross(face.up);
+    const corners = vertices
+      .map((vertex, index) => ({ index, offset: vertex.clone().sub(face.centroid) }))
+      .filter(({ offset }) => Math.abs(offset.dot(face.normal)) < 1e-5);
+    corners.sort((a, b) => Math.atan2(a.offset.dot(side), a.offset.dot(face.up)) - Math.atan2(b.offset.dot(side), b.offset.dot(face.up)));
+    return corners.map(({ index }) => index);
+  });
+  return { vertices, faces };
+}
+
+function cornerPoints(shape: DieShape): Vector3[] {
+  return uniquePoints(shape.faces.flatMap((face) => face.triangles.flat()));
+}
+
+/** Unit vector perpendicular to `axis`, from the first of `points` that is not along it. */
+function perpendicular(axis: Vector3, points: Vector3[]): Vector3 {
+  for (const point of points) {
+    const across = point.clone().sub(axis.clone().multiplyScalar(point.dot(axis)));
+    if (across.length() > 1e-3) return across.normalize();
+  }
+  throw new Error('no point off the axis');
+}
+
+/** Rotation taking the orthonormal pair (a1, a2) onto (b1, b2). */
+function rotationBetween([a1, a2]: [Vector3, Vector3], [b1, b2]: [Vector3, Vector3]): Quaternion {
+  const source = new Matrix4().makeBasis(a1, a2, a1.clone().cross(a2));
+  const target = new Matrix4().makeBasis(b1, b2, b1.clone().cross(b2));
+  return new Quaternion().setFromRotationMatrix(target.multiply(source.transpose()));
 }
 
 /** Flat-shaded mesh geometry with one material group per face (in shape.faces order) and UVs centred on each face. */
