@@ -61,8 +61,8 @@ export interface AppearanceColorField<A> {
 export interface AppearancePanelOptions<A extends Appearance> {
   i18n: I18n<AppearanceMessageKey>;
   fields?: AppearanceColorField<A>[];
-  /** What the font size is called on this Widget, when the shared name does not say what it sizes. */
-  fontSizeLabel?: () => string;
+  /** False for a Widget that sizes its text another way. */
+  fontSize?: boolean;
   /** False for a Widget whose display has no text the shared text color would color. */
   textColor?: boolean;
   /** Called with the whole next appearance on every edit (live preview); the caller validates. */
@@ -72,8 +72,6 @@ export interface AppearancePanelOptions<A extends Appearance> {
 export interface AppearancePanel<A> {
   /** Shows these values; the input being typed into is left alone so typing is not disturbed. */
   update(appearance: A): void;
-  /** The font size row, for a Widget that wants it elsewhere in the panel (appending it moves it). */
-  fontSizeRow: HTMLElement;
 }
 
 /** Suggestions for the font input; any installed font family can be typed. */
@@ -95,7 +93,7 @@ const BACKGROUND_LABELS: Record<BackgroundKind, AppearanceMessageKey> = {
 /** Builds the appearance form inside container. Text follows the i18n locale. */
 export function mountAppearancePanel<A extends Appearance>(
   container: HTMLElement,
-  { i18n, fields = [], fontSizeLabel, textColor: showTextColor = true, onChange }: AppearancePanelOptions<A>,
+  { i18n, fields = [], fontSize: showFontSize = true, textColor: showTextColor = true, onChange }: AppearancePanelOptions<A>,
 ): AppearancePanel<A> {
   const { t } = i18n;
   let current: A | null = null;
@@ -197,7 +195,7 @@ export function mountAppearancePanel<A extends Appearance>(
   );
 
   const fontSize = input('number', { min: String(FONT_SIZE_RANGE.min), max: String(FONT_SIZE_RANGE.max), step: '1' });
-  const fontSizeRow = row(fontSizeLabel ?? (() => t('fontSize')), fontSize);
+  row(() => t('fontSize'), fontSize).hidden = !showFontSize;
   bind(
     fontSize,
     (element, appearance) => ({ ...appearance, fontSize: element.valueAsNumber }),
@@ -257,6 +255,5 @@ export function mountAppearancePanel<A extends Appearance>(
       current = appearance;
       syncs.forEach((sync) => sync());
     },
-    fontSizeRow,
   };
 }

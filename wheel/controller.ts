@@ -66,6 +66,8 @@ export interface WheelAppearance extends Appearance {
   labelDirection: LabelDirection;
   /** Largest entry text size (wheel units, the wheel radius being 100), LABEL_SIZE_LIMIT_MIN..LABEL_SIZE_LIMIT_MAX. */
   maxLabelSize: number;
+  /** Result pop-up text size, in % of the wheel diameter (the view shrinks it to keep the pop-up within the wheel). */
+  resultTextSize: number;
 }
 
 /** What the wheel remembers and shares; one value per Preset. Add new fields with defaults here. */
@@ -184,6 +186,8 @@ export const LABEL_DIRECTIONS = ['across', 'along'] as const;
 export type LabelDirection = (typeof LABEL_DIRECTIONS)[number];
 export const LABEL_SIZE_LIMIT_MIN = 4;
 export const LABEL_SIZE_LIMIT_MAX = 40;
+export const RESULT_TEXT_SIZE_MIN = 4;
+export const RESULT_TEXT_SIZE_MAX = 30;
 export const RESULT_SECONDS_MIN = 1;
 export const RESULT_SECONDS_MAX = 30;
 
@@ -203,11 +207,11 @@ export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
   // Fields added later need no version bump: missing ones are filled from these defaults.
   defaults: {
     entries: defaultEntries,
-    appearance: { ...appearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20 },
+    appearance: { ...appearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20, resultTextSize: 12 },
     animation: { duration: 5000, alwaysFull: false },
     removeAfterDraw: false,
     sound: soundDefaults,
-    result: { autoHide: true, seconds: 4 },
+    result: { autoHide: false, seconds: 4 },
   },
   isValid: (settings): settings is WheelSettings =>
     isEntryList((settings as WheelSettings).entries) &&
@@ -255,7 +259,8 @@ function isEntryList(value: unknown): value is WheelEntry[] {
 }
 
 function isWheelAppearance(value: unknown): value is WheelAppearance {
-  const { labelColor, pointerColor, labelDirection, limitLabelSize, maxLabelSize } = (value ?? {}) as Partial<WheelAppearance>;
+  const { labelColor, pointerColor, labelDirection, limitLabelSize, maxLabelSize, resultTextSize } = (value ??
+    {}) as Partial<WheelAppearance>;
   return (
     isAppearance(value) &&
     isHexColor(labelColor) &&
@@ -264,7 +269,10 @@ function isWheelAppearance(value: unknown): value is WheelAppearance {
     typeof limitLabelSize === 'boolean' &&
     typeof maxLabelSize === 'number' &&
     maxLabelSize >= LABEL_SIZE_LIMIT_MIN &&
-    maxLabelSize <= LABEL_SIZE_LIMIT_MAX
+    maxLabelSize <= LABEL_SIZE_LIMIT_MAX &&
+    typeof resultTextSize === 'number' &&
+    resultTextSize >= RESULT_TEXT_SIZE_MIN &&
+    resultTextSize <= RESULT_TEXT_SIZE_MAX
   );
 }
 

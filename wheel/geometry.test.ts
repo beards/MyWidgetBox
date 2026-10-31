@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitLabel, type LabelFit, landingRotation, MAX_LABEL_SIZE, MIN_LABEL_SIZE, landingAngle, sectorUnderPointer, spinProgress } from './geometry';
+import { fitLabel, type LabelFit, landingRotation, MAX_LABEL_SIZE, MIN_LABEL_SIZE, landingAngle, largestFitting, sectorUnderPointer, spinProgress } from './geometry';
 
 /** The wheel angle under the top pointer once the wheel is rotated clockwise by `rotation` degrees. */
 const underPointer = (rotation: number) => (((-rotation % 360) + 360) % 360);
@@ -56,6 +56,22 @@ describe('landingAngle', () => {
 
   it('keeps away from the borders within a tiny sector too', () => {
     expect(share({ start: 100, end: 101 }, (angle) => angle < 100.05 || angle > 100.95)).toBe(0);
+  });
+});
+
+describe('largestFitting', () => {
+  it('keeps the wanted size when it fits', () => {
+    expect(largestFitting(50, () => true)).toBe(50);
+  });
+
+  it('shrinks to about the largest size that fits', () => {
+    const size = largestFitting(50, (candidate) => candidate <= 23.4);
+    expect(size).toBeLessThanOrEqual(23.4);
+    expect(size).toBeGreaterThan(23);
+  });
+
+  it('gives the smallest size when nothing fits', () => {
+    expect(largestFitting(50, () => false)).toBe(1);
   });
 });
 

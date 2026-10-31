@@ -8,6 +8,8 @@ import {
   MAX_ENTRIES,
   REDUCED_MOTION_DURATION,
   RESULT_SECONDS_MAX,
+  RESULT_TEXT_SIZE_MAX,
+  RESULT_TEXT_SIZE_MIN,
   WHEEL_STATE_KEY,
   type WheelAppearance,
   type WheelController,
@@ -210,18 +212,18 @@ describe('wheel fairness', () => {
 });
 
 describe('wheel result pop-up', () => {
-  it('hides the result by itself after 4 seconds by default', () => {
-    expect(createWheelController(createTestEnv()).getState().result).toEqual({ autoHide: true, seconds: 4 });
+  it('keeps the result shown by default (4 seconds once auto-close is on)', () => {
+    expect(createWheelController(createTestEnv()).getState().result).toEqual({ autoHide: false, seconds: 4 });
   });
 
   it('remembers whether and when the result hides, and ignores invalid times', () => {
     const env = createTestEnv();
     const wheel = createWheelController(env);
     wheel.setResult({ seconds: 12 });
-    wheel.setResult({ autoHide: false });
+    wheel.setResult({ autoHide: true });
     for (const seconds of [0, RESULT_SECONDS_MAX + 1, Number.NaN]) wheel.setResult({ seconds });
-    expect(wheel.getState().result).toEqual({ autoHide: false, seconds: 12 });
-    expect(createWheelController(env).getState().result).toEqual({ autoHide: false, seconds: 12 });
+    expect(wheel.getState().result).toEqual({ autoHide: true, seconds: 12 });
+    expect(createWheelController(env).getState().result).toEqual({ autoHide: true, seconds: 12 });
   });
 
   it('fills the defaults into Settings saved before the option existed', () => {
@@ -230,7 +232,32 @@ describe('wheel result pop-up', () => {
     delete exported.presets[0].settings.result;
     const wheel = createWheelController(createTestEnv());
     expect(wheel.importSettings(JSON.stringify(exported))).toBe(true);
-    expect(wheel.getState().result).toEqual({ autoHide: true, seconds: 4 });
+    expect(wheel.getState().result).toEqual({ autoHide: false, seconds: 4 });
+  });
+});
+
+describe('wheel result pop-up text size', () => {
+  it('defaults to 12% of the wheel diameter', () => {
+    expect(createWheelController(createTestEnv()).getState().appearance.resultTextSize).toBe(12);
+  });
+
+  it('ignores sizes outside the allowed range', () => {
+    const wheel = createWheelController(createTestEnv());
+    const { appearance } = wheel.getState();
+    for (const resultTextSize of [RESULT_TEXT_SIZE_MIN - 1, RESULT_TEXT_SIZE_MAX + 1, Number.NaN]) {
+      wheel.setAppearance({ ...appearance, resultTextSize });
+      expect(wheel.getState().appearance).toEqual(appearance);
+    }
+    wheel.setAppearance({ ...appearance, resultTextSize: RESULT_TEXT_SIZE_MAX });
+    expect(wheel.getState().appearance.resultTextSize).toBe(RESULT_TEXT_SIZE_MAX);
+  });
+
+  it('fills the default into Settings saved before the option existed', () => {
+    const exported = JSON.parse(createWheelController(createTestEnv()).exportSettings());
+    delete exported.presets[0].settings.appearance.resultTextSize;
+    const wheel = createWheelController(createTestEnv());
+    expect(wheel.importSettings(JSON.stringify(exported))).toBe(true);
+    expect(wheel.getState().appearance.resultTextSize).toBe(12);
   });
 });
 
@@ -277,6 +304,7 @@ describe('wheel Settings, Presets and Share link', () => {
     labelDirection: 'along',
     limitLabelSize: true,
     maxLabelSize: 20,
+    resultTextSize: 20,
   };
 
   function customized(env: Env) {

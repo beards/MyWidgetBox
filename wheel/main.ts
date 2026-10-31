@@ -14,6 +14,8 @@ import {
   MAX_ENTRIES,
   MAX_LABEL_LENGTH,
   MAX_WEIGHT,
+  RESULT_TEXT_SIZE_MAX,
+  RESULT_TEXT_SIZE_MIN,
   type LabelDirection,
   type WheelAppearance,
   type WheelEntry,
@@ -22,6 +24,7 @@ import {
   animationFor,
   createWheelController,
 } from './controller';
+import { largestFitting } from './geometry';
 import { messages } from './messages';
 import { createWheelScene } from './scene';
 
@@ -70,8 +73,8 @@ const appearancePanel = mountAppearancePanel<WheelAppearance>($('#appearance'), 
     { key: 'labelColor', label: () => t('labelColor'), quickColors: true },
     { key: 'pointerColor', label: () => t('pointerColor') },
   ],
-  // On the wheel, the shared font size only sizes the result pop-up (entry text is sized to fit its sector).
-  fontSizeLabel: () => t('resultFontSize'),
+  // Entry text is sized to fit its sector and the result pop-up to the wheel (resultTextSize).
+  fontSize: false,
   // Every text on the wheel follows the wheel's own text color instead.
   textColor: false,
   onChange(appearance) {
@@ -80,8 +83,6 @@ const appearancePanel = mountAppearancePanel<WheelAppearance>($('#appearance'), 
   },
 });
 const labelOptions = mountLabelOptions($('#appearance'));
-// After the entry text options, so the two kinds of text size are not mistaken for each other.
-$('#appearance').append(appearancePanel.fontSizeRow);
 const presetPanel = mountPresetPanel(wheel, i18n);
 const sharePanel = mountSharePanel(i18n, (options) => wheel.shareLink(options));
 const settingsFilePanel = mountSettingsFilePanel(i18n, {
@@ -101,9 +102,25 @@ function showResult(outcome: WheelOutcome) {
   result.classList.remove('wheel__result--in');
   void result.offsetWidth;
   result.classList.add('wheel__result--in');
+  fitResult();
   clearTimeout(resultTimer);
   const { autoHide, seconds } = wheel.getState().result;
   if (autoHide) resultTimer = window.setTimeout(hideResult, seconds * 1000);
+}
+
+/**
+ * Sizes the result pop-up text to its share of the wheel diameter, smaller when the pop-up
+ * would not fit within the wheel's size (wider or taller than the wheel).
+ */
+function fitResult() {
+  if (result.hidden) return;
+  const diameter = scene.diameter();
+  result.style.maxWidth = `${diameter}px`;
+  const size = largestFitting((diameter * wheel.getState().appearance.resultTextSize) / 100, (candidate) => {
+    result.style.fontSize = `${candidate}px`;
+    return result.offsetHeight <= diameter && result.scrollWidth <= result.clientWidth;
+  });
+  result.style.fontSize = `${size}px`;
 }
 
 function hideResult() {
@@ -118,6 +135,8 @@ function render(state: WheelState) {
   result.style.color = appearance.labelColor;
   appearancePanel.update(appearance);
   labelOptions.update(appearance);
+  // Font and size changes apply to a pop-up already shown.
+  fitResult();
 
   // Drawn entries are hidden from the wheel (it shows only what can still be drawn) and marked in the editor.
   const drawnIds = state.removeAfterDraw ? state.drawnEntryIds : [];
@@ -242,6 +261,7 @@ i18n.subscribe(() => {
 render(wheel.getState());
 
 stage.addEventListener('click', () => wheel.spin());
+new ResizeObserver(fitResult).observe(stage);
 result.addEventListener('click', hideResult);
 spinButton.addEventListener('click', () => wheel.spin());
 resetButton.addEventListener('click', () => wheel.reset());
@@ -303,19 +323,34 @@ function mountLabelOptions(container: HTMLElement) {
   slider.addEventListener('input', () => change({ maxLabelSize: Number(slider.value) }));
   sliderLabel.append(sliderText, slider, value);
 
+  const resultSizeLabel = document.createElement('label');
+  const resultSizeText = document.createElement('span');
+  const resultSize = document.createElement('input');
+  resultSize.type = 'range';
+  resultSize.min = String(RESULT_TEXT_SIZE_MIN);
+  resultSize.max = String(RESULT_TEXT_SIZE_MAX);
+  resultSize.step = '1';
+  const resultSizeValue = document.createElement('output');
+  resultSize.addEventListener('input', () => change({ resultTextSize: Number(resultSize.value) }));
+  resultSizeLabel.append(resultSizeText, resultSize, resultSizeValue);
+
   const relabel = () => {
     directionText.textContent = t('labelDirection');
     directionOptions[0]!.textContent = t('labelDirectionAcross');
     directionOptions[1]!.textContent = t('labelDirectionAlong');
     toggleText.textContent = t('limitLabelSize');
     sliderText.textContent = t('maxLabelSize');
+    resultSizeText.textContent = t('resultTextSize');
   };
   relabel();
   i18n.subscribe(relabel);
-  container.append(directionLabel, toggleLabel, sliderLabel);
+  // After the entry text options, so the two kinds of text size are not mistaken for each other.
+  container.append(directionLabel, toggleLabel, sliderLabel, resultSizeLabel);
 
   return {
-    update({ labelDirection, limitLabelSize, maxLabelSize }: WheelAppearance) {
+    update({ labelDirection, limitLabelSize, maxLabelSize, resultTextSize }: WheelAppearance) {
+      if (document.activeElement !== resultSize) resultSize.value = String(resultTextSize);
+      resultSizeValue.textContent = `${resultTextSize}%`;
       direction.value = labelDirection;
       toggle.checked = limitLabelSize;
       if (document.activeElement !== slider) slider.value = String(maxLabelSize);

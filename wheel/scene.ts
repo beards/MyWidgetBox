@@ -26,6 +26,8 @@ export interface WheelScene {
    */
   setLabelLayout(layout: LabelLayout): void;
   setColors(colors: WheelColors): void;
+  /** The drawn wheel's diameter in the container's CSS px (unaffected by zoom on an ancestor). */
+  diameter(): number;
   /**
    * Spins forward so that wheel angle `angle` (see WheelOutcome.angle) stops under the
    * pointer, then calls onDone. `reduced` skips the spin and just shows the landing.
@@ -81,7 +83,8 @@ function textMeasurer(group: SVGGElement): (text: string, size: number) => numbe
 }
 
 export function createWheelScene(container: HTMLElement): WheelScene {
-  const root = svg('svg', { viewBox: '-110 -116 220 228', role: 'img', 'aria-hidden': 'true' });
+  const VIEW = { width: 220, height: 228 };
+  const root = svg('svg', { viewBox: `-110 -116 ${VIEW.width} ${VIEW.height}`, role: 'img', 'aria-hidden': 'true' });
   const rotor = svg('g');
   const sectors = svg('g');
   const labels = svg('g', { 'font-size': MAX_LABEL_SIZE, 'dominant-baseline': 'central', 'text-anchor': 'middle' });
@@ -125,6 +128,8 @@ export function createWheelScene(container: HTMLElement): WheelScene {
   const applyRotation = () => rotor.setAttribute('transform', `rotate(${rotation % 360})`);
 
   return {
+    // The SVG keeps its aspect ratio, so the wheel is scaled by the tighter of the two fits.
+    diameter: () => 2 * RADIUS * Math.min(container.clientWidth / VIEW.width, container.clientHeight / VIEW.height),
     setEntries(entries) {
       parts = sectorsFor(entries);
       if (parts.length === 0) {

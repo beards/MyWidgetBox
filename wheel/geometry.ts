@@ -11,6 +11,22 @@ export function landingRotation(from: number, angle: number, turns: number): num
   return from + turns * 360 + mod(-angle - from);
 }
 
+/**
+ * The largest size up to `wanted` for which `fits` holds (to within 1% of `wanted`), never
+ * below 1; `fits` must hold for every size below one that fits.
+ */
+export function largestFitting(wanted: number, fits: (size: number) => boolean): number {
+  if (fits(wanted)) return wanted;
+  let low = 1;
+  let high = wanted;
+  while (high - low > wanted / 100) {
+    const middle = (low + high) / 2;
+    if (fits(middle)) low = middle;
+    else high = middle;
+  }
+  return low;
+}
+
 /** Chance that the wheel stops just short of the border it is about to cross. */
 const NEAR_NEXT_BORDER = 0.45;
 /** Chance that it stops just past the border it has crossed (otherwise: anywhere). */

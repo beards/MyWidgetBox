@@ -45,14 +45,15 @@ body {
 /* The pop-up over the wheel showing the Outcome; click (or wait) to dismiss. */
 .wheel__result {
   position: absolute;
-  max-width: 90%;
+  /* At most as wide as the wheel (max-width set inline, padding and border included). */
+  box-sizing: border-box;
   padding: 0.4em 0.9em;
   border: 4px solid #ffffff;
   border-radius: 0.5em;
   box-shadow: 0 0.4em 1.5em rgb(0 0 0 / 0.35);
   /* Text color: the wheel text color (applied inline). */
   font: inherit;
-  font-size: 2.4em;
+  /* Font size: a share of the wheel diameter, set inline. */
   font-weight: 700;
   overflow-wrap: anywhere;
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
