@@ -9,6 +9,7 @@ import {
   serializeSettings,
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
+import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
 
 export const DIE_SIDES = [4, 6, 8, 10, 12, 20, 100] as const;
 export type DieSides = (typeof DIE_SIDES)[number];
@@ -50,6 +51,8 @@ export interface DiceSettings {
   diceSet: DiceSet;
   appearance: DiceAppearance;
   animation: AnimationSettings;
+  /** Played when the dice land. */
+  sound: SoundSettings;
   /** Roll by shaking the phone (off by default; needs motion permission on iOS). */
   shakeToRoll: boolean;
 }
@@ -77,6 +80,8 @@ export interface DiceState {
   /** The animation Settings in effect (see AnimationSettings). */
   animationDuration: number;
   alwaysFullAnimation: boolean;
+  /** The sound Settings in effect; the view plays the landing sound with them. */
+  sound: SoundSettings;
   shakeToRoll: boolean;
 }
 
@@ -103,6 +108,8 @@ export interface DiceController {
   /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
   setAnimationDuration(ms: number): void;
   setAlwaysFullAnimation(always: boolean): void;
+  /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
+  setSound(next: Partial<SoundSettings>): void;
   setShakeToRoll(enabled: boolean): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
@@ -132,12 +139,14 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
   defaults: {
     diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
     animation: { duration: 3000, alwaysFull: false },
+    sound: soundDefaults,
     shakeToRoll: false,
     appearance: { ...appearanceDefaults, dieColor: '#f7f3e8', pipColor: '#1f1f1f' },
   },
   isValid: (settings): settings is DiceSettings =>
     isDiceSet((settings as DiceSettings).diceSet) &&
     isAnimationSettings((settings as DiceSettings).animation) &&
+    isSoundSettings((settings as DiceSettings).sound) &&
     typeof (settings as DiceSettings).shakeToRoll === 'boolean' &&
     isDiceAppearance((settings as DiceSettings).appearance),
 };
@@ -197,6 +206,7 @@ export function createDiceController(
       appearance: current.appearance,
       animationDuration: current.animation.duration,
       alwaysFullAnimation: current.animation.alwaysFull,
+      sound: current.sound,
       shakeToRoll: current.shakeToRoll,
       presets,
       selectedPresetId,
@@ -283,6 +293,10 @@ export function createDiceController(
       if (isValidDuration(ms)) setAnimation({ duration: ms });
     },
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
+    setSound(next) {
+      const sound = { ...settings.getSnapshot().settings.sound, ...next };
+      if (isSoundSettings(sound)) updateSettings({ sound });
+    },
     setShakeToRoll: (shakeToRoll) => updateSettings({ shakeToRoll }),
     createPreset: (name) => changeSettings(() => settings.createPreset(name)),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),

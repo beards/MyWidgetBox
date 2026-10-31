@@ -64,6 +64,20 @@
 
         <div class="dice__appearance" id="appearance"></div>
 
+        <h2 data-i18n="sound"></h2>
+        <label class="dice__sound">
+          <input type="checkbox" id="sound-enabled" />
+          <span data-i18n="soundEnabled"></span>
+        </label>
+        <label class="dice__sound">
+          <span data-i18n="soundVolume"></span>
+          <input type="range" id="sound-volume" min="0" max="100" step="5" />
+        </label>
+        <label class="dice__sound">
+          <span data-i18n="soundUrl"></span>
+          <input type="url" id="sound-url" />
+        </label>
+
         <h2 data-i18n="shareLink"></h2>
         <div class="dice__share">
           <label><input type="checkbox" id="share-display" /> <span data-i18n="shareDisplay"></span></label>
