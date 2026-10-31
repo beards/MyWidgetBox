@@ -15,3 +15,14 @@ export function landingRotation(from: number, angle: number, turns: number): num
 export function easeOut(t: number): number {
   return 1 - (1 - t) ** 4;
 }
+
+/**
+ * Index of the sector under the top pointer once the wheel is rotated clockwise by `rotation`
+ * degrees (sectors as from sectorsFor), or -1 for an empty wheel. The view ticks when it changes.
+ */
+export function sectorUnderPointer(sectors: { start: number; end: number }[], rotation: number): number {
+  if (sectors.length === 0) return -1;
+  const angle = (((-rotation % 360) + 360) % 360);
+  const index = sectors.findIndex((sector) => angle < sector.end);
+  return index === -1 ? sectors.length - 1 : index;
+}

@@ -38,7 +38,14 @@ export type WheelMessageKey =
   | 'importSettings'
   | 'importError'
   | 'labelColor'
-  | 'pointerColor';
+  | 'pointerColor'
+  | 'removeAfterDraw'
+  | 'drawn'
+  | 'allDrawn'
+  | 'sound'
+  | 'soundEnabled'
+  | 'soundVolume'
+  | 'soundUrl';
 
 export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
   en: {
@@ -80,6 +87,13 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     importError: 'This file could not be imported. Your Settings were not changed.',
     labelColor: 'Entry text color',
     pointerColor: 'Pointer color',
+    removeAfterDraw: 'Remove entries after they are drawn',
+    drawn: 'drawn',
+    allDrawn: 'All entries have been drawn. Reset to start over.',
+    sound: 'Sound',
+    soundEnabled: 'Tick while the wheel spins',
+    soundVolume: 'Volume',
+    soundUrl: 'Custom tick sound URL (empty = built-in)',
   },
   'zh-Hant': {
     ...appearanceMessages['zh-Hant'],
@@ -120,5 +134,12 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     importError: '無法匯入此檔案，現有 Settings 未變更。',
     labelColor: '選項文字顏色',
     pointerColor: '指針顏色',
+    removeAfterDraw: '抽中後移除',
+    drawn: '已抽',
+    allDrawn: '所有選項都已抽完，請按「重置」重新開始。',
+    sound: '音效',
+    soundEnabled: '轉動時播放喀喀聲',
+    soundVolume: '音量',
+    soundUrl: '自訂喀喀聲網址（留空＝內建音效）',
   },
 };

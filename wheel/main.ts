@@ -5,6 +5,7 @@ import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { readDisplayOptions } from '../shared/share-link';
+import { createSoundPlayer } from '../shared/sound';
 import {
   MAX_ENTRIES,
   MAX_LABEL_LENGTH,
@@ -57,13 +58,21 @@ const importError = $('#settings-import-error');
 const durationInput = $<HTMLInputElement>('#duration');
 const durationValue = $<HTMLOutputElement>('#duration-value');
 const alwaysFullInput = $<HTMLInputElement>('#always-full');
+const removeAfterDrawInput = $<HTMLInputElement>('#remove-after-draw');
+const allDrawnNotice = $('#all-drawn');
+const soundEnabledInput = $<HTMLInputElement>('#sound-enabled');
+const soundVolumeInput = $<HTMLInputElement>('#sound-volume');
+const soundUrlInput = $<HTMLInputElement>('#sound-url');
 
 const scene = createWheelScene(stage);
+const sound = createSoundPlayer();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each spin starts its animation exactly once. */
 let playing: WheelOutcome | null = null;
-/** The entries last drawn, so the editor and the wheel are rebuilt only when they change. */
-let drawnEntries: WheelEntry[] | null = null;
+/** What the editor and the wheel were last rendered from, so they are rebuilt only when it changes. */
+let renderedEntries: WheelEntry[] | null = null;
+let renderedDrawn: string[] | null = null;
+let renderedWheel: WheelEntry[] | null = null;
 let resultTimer = 0;
 
 const appearancePanel = mountAppearancePanel<WheelAppearance>($('#appearance'), {
@@ -96,16 +105,23 @@ function hideResult() {
 }
 
 function render(state: WheelState) {
-  const { entries, appearance, presets, selectedPresetId, outcome, history, animating } = state;
+  const { entries, appearance, presets, selectedPresetId, outcome, history, animating, remainingEntries, allDrawn } = state;
   applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
   scene.setColors({ label: appearance.labelColor, pointer: appearance.pointerColor });
   appearancePanel.update(appearance);
 
-  if (entries !== drawnEntries) {
-    drawnEntries = entries;
-    scene.setEntries(entries);
-    renderEntries(entries);
+  // Drawn entries are hidden from the wheel (it shows only what can still be drawn) and marked in the editor.
+  const drawnIds = state.removeAfterDraw ? state.drawnEntryIds : [];
+  if (remainingEntries !== renderedWheel) {
+    renderedWheel = remainingEntries;
+    scene.setEntries(remainingEntries);
   }
+  if (entries !== renderedEntries || drawnIds.join() !== renderedDrawn?.join()) {
+    renderedEntries = entries;
+    renderedDrawn = drawnIds;
+    renderEntries(entries, new Set(drawnIds));
+  }
+  allDrawnNotice.hidden = !allDrawn;
 
   presetSelect.replaceChildren(
     ...(selectedPresetId === null ? [new Option(t('sharedPreset'), '', false, true)] : []),
@@ -120,17 +136,23 @@ function render(state: WheelState) {
   if (animating && outcome && outcome !== playing) {
     playing = outcome;
     hideResult();
-    scene.play(outcome.angle, animationFor(state, reducedMotion.matches), () => {
+    const onTick = () => sound.play('tick', wheel.getState().sound);
+    scene.play(outcome.angle, { ...animationFor(state, reducedMotion.matches), onTick }, () => {
       wheel.finishAnimation();
       showResult(outcome);
     });
   }
   if (!outcome) hideResult();
-  spinButton.disabled = animating;
+  spinButton.disabled = animating || allDrawn;
   addEntryButton.disabled = entries.length >= MAX_ENTRIES;
   durationInput.value = String(state.animationDuration / 1000);
   durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
   alwaysFullInput.checked = state.alwaysFullAnimation;
+  removeAfterDrawInput.checked = state.removeAfterDraw;
+  soundEnabledInput.checked = state.sound.enabled;
+  soundVolumeInput.value = String(Math.round(state.sound.volume * 100));
+  soundVolumeInput.disabled = !state.sound.enabled;
+  if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
   shareUrl.value = shareLink();
 
   // While spinning, the newest entry would give the Outcome away before the wheel stops.
@@ -146,12 +168,15 @@ function render(state: WheelState) {
   );
 }
 
-function renderEntries(entries: WheelEntry[]) {
-  const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
+function renderEntries(entries: WheelEntry[], drawn: Set<string>) {
+  // Chances are over the entries still on the wheel.
+  const total = entries.reduce((sum, entry) => sum + (drawn.has(entry.id) ? 0 : entry.weight), 0);
   entryList.replaceChildren(
     ...entries.map((entry, index) => {
       const n = index + 1;
       const item = document.createElement('li');
+      const isDrawn = drawn.has(entry.id);
+      item.classList.toggle('wheel__entry--drawn', isDrawn);
       const color = input('color', t('entryColor', { n }));
       color.value = entry.color;
       color.addEventListener('change', () => edit(() => wheel.updateEntry(entry.id, { color: color.value })));
@@ -167,7 +192,7 @@ function renderEntries(entries: WheelEntry[]) {
       weight.addEventListener('change', () => edit(() => wheel.updateEntry(entry.id, { weight: weight.valueAsNumber })));
       const chance = document.createElement('span');
       chance.className = 'wheel__chance';
-      chance.textContent = t('entryChance', { percent: formatPercent((entry.weight / total) * 100) });
+      chance.textContent = isDrawn ? t('drawn') : t('entryChance', { percent: formatPercent((entry.weight / total) * 100) });
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = '×';
@@ -202,13 +227,13 @@ function shareLink() {
 /** Runs an edit, then redraws the editor so inputs holding a value the controller rejected snap back. */
 function edit(action: () => void) {
   action();
-  drawnEntries = null;
+  renderedEntries = null;
   render(wheel.getState());
 }
 
 wheel.subscribe(render);
 i18n.subscribe(() => {
-  drawnEntries = null;
+  renderedEntries = null;
   render(wheel.getState());
 });
 render(wheel.getState());
@@ -260,6 +285,16 @@ shareCopy.addEventListener('click', async () => {
 shareUrl.addEventListener('focus', () => shareUrl.select());
 durationInput.addEventListener('input', () => wheel.setAnimationDuration(Number(durationInput.value) * 1000));
 alwaysFullInput.addEventListener('change', () => wheel.setAlwaysFullAnimation(alwaysFullInput.checked));
+removeAfterDrawInput.addEventListener('change', () => wheel.setRemoveAfterDraw(removeAfterDrawInput.checked));
+soundEnabledInput.addEventListener('change', () => wheel.setSound({ enabled: soundEnabledInput.checked }));
+soundVolumeInput.addEventListener('input', () => wheel.setSound({ volume: Number(soundVolumeInput.value) / 100 }));
+// A sample tick once the volume is chosen.
+soundVolumeInput.addEventListener('change', () => sound.play('tick', wheel.getState().sound));
+soundUrlInput.addEventListener('change', () => {
+  wheel.setSound({ url: soundUrlInput.value.trim() });
+  // An invalid URL was ignored: show the one still in effect.
+  soundUrlInput.value = wheel.getState().sound.url;
+});
 settingsExport.addEventListener('click', () => {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([wheel.exportSettings()], { type: 'application/json' }));

@@ -5,6 +5,7 @@ import { createTestEnv } from '../shared/test-env';
 import {
   MAX_ENTRIES,
   REDUCED_MOTION_DURATION,
+  WHEEL_STATE_KEY,
   type WheelAppearance,
   type WheelController,
   type WheelState,
@@ -282,6 +283,148 @@ describe('wheel Settings, Presets and Share link', () => {
     expect(target.importSettings(source.exportSettings())).toBe(true);
     expect(settingsOf(target.getState())).toEqual(settingsOf(source.getState()));
     expect(target.importSettings('{"namespace":"dice"}')).toBe(false);
+  });
+});
+
+describe('wheel remove after draw', () => {
+  const labels = (entries: { label: string }[]) => entries.map((entry) => entry.label);
+
+  it('takes a drawn entry off the wheel once its spin is revealed, so it cannot be drawn again', () => {
+    // Weights 1 + 1 + 1: 0.5 falls in b; then with b gone (a + c), 0.5 falls in c.
+    const wheel = wheelWith(createTestEnv({ random: [at(0.5), at(0.5), at(0.5), at(0.5)] }), [
+      { label: 'a', weight: 1 },
+      { label: 'b', weight: 1 },
+      { label: 'c', weight: 1 },
+    ]);
+    wheel.setRemoveAfterDraw(true);
+
+    wheel.spin();
+    // The wheel keeps the drawn sector until the animation has landed on it.
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['a', 'b', 'c']);
+    wheel.finishAnimation();
+    expect(wheel.getState().outcome!.label).toBe('b');
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['a', 'c']);
+    expect(wheel.getState().drawnEntryIds).toEqual([wheel.getState().entries[1]!.id]);
+    // The Settings keep every entry; only the State marks b as drawn.
+    expect(labels(wheel.getState().entries)).toEqual(['a', 'b', 'c']);
+
+    spinAndFinish(wheel);
+    expect(wheel.getState().outcome!.label).toBe('c');
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['a']);
+  });
+
+  it('reports when every entry has been drawn, ignores spins then, and reset restores the full wheel', () => {
+    const wheel = wheelWith(createTestEnv({ random: [0, 0, 0, 0, 0, 0] }), [
+      { label: 'a', weight: 1 },
+      { label: 'b', weight: 1 },
+    ]);
+    wheel.setRemoveAfterDraw(true);
+    spinAndFinish(wheel);
+    expect(wheel.getState().allDrawn).toBe(false);
+    spinAndFinish(wheel);
+    expect(wheel.getState()).toMatchObject({ allDrawn: true, remainingEntries: [] });
+
+    wheel.spin();
+    expect(wheel.getState()).toMatchObject({ animating: false, history: [{ label: 'b' }, { label: 'a' }] });
+
+    wheel.reset();
+    expect(wheel.getState()).toMatchObject({ allDrawn: false, drawnEntryIds: [], outcome: null, history: [] });
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['a', 'b']);
+    spinAndFinish(wheel);
+    expect(wheel.getState().outcome!.label).toBe('a');
+  });
+
+  it('becomes spinnable again when an entry is added after everything was drawn', () => {
+    const wheel = wheelWith(createTestEnv({ random: [0, 0, 0, 0] }), [{ label: 'a', weight: 1 }]);
+    wheel.setRemoveAfterDraw(true);
+    spinAndFinish(wheel);
+    expect(wheel.getState().allDrawn).toBe(true);
+    wheel.addEntry('late');
+    expect(wheel.getState().allDrawn).toBe(false);
+    spinAndFinish(wheel);
+    expect(wheel.getState().outcome!.label).toBe('late');
+  });
+
+  it('leaves the wheel whole and records nothing while the toggle is off', () => {
+    const wheel = wheelWith(createTestEnv({ random: [0, 0, 0, 0] }), [
+      { label: 'a', weight: 1 },
+      { label: 'b', weight: 1 },
+    ]);
+    spinAndFinish(wheel);
+    spinAndFinish(wheel);
+    expect(wheel.getState()).toMatchObject({ drawnEntryIds: [], allDrawn: false });
+    expect(wheel.getState().history.map((outcome) => outcome.label)).toEqual(['a', 'a']);
+  });
+
+  it('drops a deleted entry from the drawn State; edited entries stay drawn', () => {
+    const wheel = wheelWith(createTestEnv({ random: [0, 0, at(0.9), 0] }), [
+      { label: 'a', weight: 1 },
+      { label: 'b', weight: 1 },
+      { label: 'c', weight: 1 },
+    ]);
+    wheel.setRemoveAfterDraw(true);
+    const [a, b, c] = wheel.getState().entries;
+    spinAndFinish(wheel);
+    spinAndFinish(wheel);
+    expect(wheel.getState().drawnEntryIds).toEqual([a!.id, c!.id]);
+
+    wheel.updateEntry(a!.id, { label: 'A', weight: 5 });
+    wheel.removeEntry(c!.id);
+    expect(wheel.getState().drawnEntryIds).toEqual([a!.id]);
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['b']);
+    // A new entry may reuse the deleted entry's id; it must start undrawn.
+    wheel.addEntry('d');
+    expect(labels(wheel.getState().remainingEntries)).toEqual(['b', 'd']);
+    expect(wheel.getState().remainingEntries[0]).toBe(b);
+  });
+
+  it('keeps the drawn entries after a reload', () => {
+    const env = createTestEnv({ random: [at(0.5), 0] });
+    const wheel = wheelWith(env, [
+      { label: 'a', weight: 1 },
+      { label: 'b', weight: 1 },
+    ]);
+    wheel.setRemoveAfterDraw(true);
+    spinAndFinish(wheel);
+
+    const reloaded = createWheelController(env);
+    expect(reloaded.getState()).toMatchObject({ removeAfterDraw: true, drawnEntryIds: wheel.getState().drawnEntryIds });
+    expect(labels(reloaded.getState().remainingEntries)).toEqual(['a']);
+    reloaded.reset();
+    expect(labels(createWheelController(env).getState().remainingEntries)).toEqual(['a', 'b']);
+  });
+
+  it('opens with nothing drawn when the stored State is unreadable', () => {
+    const env = createTestEnv();
+    env.storage.setItem(WHEEL_STATE_KEY, '{not json');
+    expect(createWheelController(env).getState().drawnEntryIds).toEqual([]);
+  });
+
+  it('shares the toggle but not the drawn entries', () => {
+    const page = 'https://example.test/MyWidgetBox/wheel/';
+    const sharer = wheelWith(createTestEnv({ url: page, random: [0, 0] }), [
+      { label: 'a', weight: 1 },
+      { label: 'b', weight: 1 },
+    ]);
+    sharer.setRemoveAfterDraw(true);
+    spinAndFinish(sharer);
+
+    const opened = createWheelController(createTestEnv({ url: sharer.shareLink() }));
+    expect(opened.getState()).toMatchObject({ removeAfterDraw: true, drawnEntryIds: [], allDrawn: false });
+    expect(labels(opened.getState().remainingEntries)).toEqual(['a', 'b']);
+  });
+
+  it('remembers and shares the sound Settings, ignoring invalid ones', () => {
+    const page = 'https://example.test/MyWidgetBox/wheel/';
+    const env = createTestEnv({ url: page });
+    const wheel = createWheelController(env);
+    wheel.setSound({ volume: 0.3, url: 'https://example.test/tick.mp3' });
+    wheel.setSound({ volume: 2 });
+    wheel.setSound({ url: 'ftp://example.test/tick.mp3' });
+    const expected = { enabled: true, volume: 0.3, url: 'https://example.test/tick.mp3' };
+    expect(wheel.getState().sound).toEqual(expected);
+    expect(createWheelController(env).getState().sound).toEqual(expected);
+    expect(createWheelController(createTestEnv({ url: wheel.shareLink() })).getState().sound).toEqual(expected);
   });
 });
 

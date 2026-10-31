@@ -1,6 +1,6 @@
 // SVG view of the wheel: crisp at any zoom (OBS scaling) and cheap to redraw. No controller import.
 import { type WheelEntry, sectorsFor } from './controller';
-import { easeOut, landingRotation } from './geometry';
+import { easeOut, landingRotation, sectorUnderPointer } from './geometry';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RADIUS = 100;
@@ -13,14 +13,19 @@ export interface WheelColors {
 }
 
 export interface WheelScene {
-  /** Redraws the sectors (keeps the current rotation). */
+  /** Redraws the sectors (keeps the current rotation); no entries draws an empty grey disc. */
   setEntries(entries: WheelEntry[]): void;
   setColors(colors: WheelColors): void;
   /**
    * Spins forward so that wheel angle `angle` (see WheelOutcome.angle) stops under the
    * pointer, then calls onDone. `reduced` skips the spin and just shows the landing.
+   * `onTick` is called each time a sector boundary passes the pointer (at most once per frame).
    */
-  play(angle: number, options: { duration: number; reduced: boolean }, onDone: () => void): void;
+  play(
+    angle: number,
+    options: { duration: number; reduced: boolean; onTick?: () => void },
+    onDone: () => void,
+  ): void;
 }
 
 const svg = <K extends keyof SVGElementTagNameMap>(name: K, attributes: Record<string, string | number> = {}) => {
@@ -61,11 +66,17 @@ export function createWheelScene(container: HTMLElement): WheelScene {
 
   let rotation = 0;
   let frame = 0;
+  let parts: ReturnType<typeof sectorsFor> = [];
   const applyRotation = () => rotor.setAttribute('transform', `rotate(${rotation % 360})`);
 
   return {
     setEntries(entries) {
-      const parts = sectorsFor(entries);
+      parts = sectorsFor(entries);
+      if (parts.length === 0) {
+        sectors.replaceChildren(svg('circle', { r: RADIUS, fill: '#d0d0d0' }));
+        labels.replaceChildren();
+        return;
+      }
       sectors.replaceChildren(
         ...parts.map(({ entry, start, end }) =>
           entries.length === 1
@@ -92,7 +103,7 @@ export function createWheelScene(container: HTMLElement): WheelScene {
       labels.setAttribute('fill', label);
       pointer.setAttribute('fill', pointerColor);
     },
-    play(angle, { duration, reduced }, onDone) {
+    play(angle, { duration, reduced, onTick }, onDone) {
       cancelAnimationFrame(frame);
       const from = rotation % 360;
       const to = landingRotation(from, angle, reduced ? 0 : Math.max(2, Math.round(duration / 700)));
@@ -103,10 +114,14 @@ export function createWheelScene(container: HTMLElement): WheelScene {
         return;
       }
       const startTime = performance.now();
+      let sector = sectorUnderPointer(parts, rotation);
       const step = (now: number) => {
         const t = Math.min(1, (now - startTime) / duration);
         rotation = from + (to - from) * easeOut(t);
         applyRotation();
+        const next = sectorUnderPointer(parts, rotation);
+        if (next !== sector && parts.length > 1) onTick?.();
+        sector = next;
         if (t < 1) frame = requestAnimationFrame(step);
         else onDone();
       };

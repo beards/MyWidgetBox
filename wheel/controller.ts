@@ -8,10 +8,11 @@ import {
   serializeSettings,
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
+import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
 
 /** One option on the wheel; its sector's angle is proportional to its weight. */
 export interface WheelEntry {
-  /** Stable within the Settings, so edits and (later) drawn-entry State can refer to it. */
+  /** Stable within the Settings, so edits and the drawn-entry State can refer to it. */
   id: string;
   label: string;
   /** Positive number, at most MAX_WEIGHT. */
@@ -59,6 +60,10 @@ export interface WheelSettings {
   entries: WheelEntry[];
   appearance: WheelAppearance;
   animation: AnimationSettings;
+  /** Take each drawn entry off the wheel until reset (the drawn entries are State, not Settings). */
+  removeAfterDraw: boolean;
+  /** Tick played each time a sector boundary passes the pointer. */
+  sound: SoundSettings;
 }
 
 export interface WheelState {
@@ -67,6 +72,21 @@ export interface WheelState {
   appearance: WheelAppearance;
   animationDuration: number;
   alwaysFullAnimation: boolean;
+  removeAfterDraw: boolean;
+  /** The sound Settings in effect; the view plays the tick with them. */
+  sound: SoundSettings;
+  /**
+   * Ids of entries drawn since the last reset (State: kept across reloads, never in Share links),
+   * oldest first, always a subset of `entries`. Only used while removeAfterDraw is on.
+   */
+  drawnEntryIds: string[];
+  /**
+   * The entries on the wheel, which spins choose from: `entries` minus the drawn ones while
+   * removeAfterDraw is on. A drawn entry stays until its spin has been revealed.
+   */
+  remainingEntries: WheelEntry[];
+  /** removeAfterDraw is on and every entry has been drawn: spins are ignored until reset. */
+  allDrawn: boolean;
   presets: PresetSummary[];
   /** null while Settings opened from a Share link are in effect and not saved. */
   selectedPresetId: string | null;
@@ -89,12 +109,15 @@ export interface WheelController {
   removeEntry(id: string): void;
   /** Replaces the appearance (applied live); invalid appearances are ignored. */
   setAppearance(appearance: WheelAppearance): void;
-  /** Decides a new Outcome and starts animating it; ignored while animating. */
+  /** Decides a new Outcome among the remaining entries and starts animating it; ignored while animating or all drawn. */
   spin(): void;
-  /** Called by the view when the animation of the current Outcome has finished. */
+  /** Called by the view when the animation of the current Outcome has finished; records the draw. */
   finishAnimation(): void;
-  /** Clears the Outcome and history (entries are kept); ignored while animating. */
+  /** Clears the Outcome, history and drawn entries (entries are kept); ignored while animating. */
   reset(): void;
+  setRemoveAfterDraw(on: boolean): void;
+  /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
+  setSound(next: Partial<SoundSettings>): void;
   /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
   setAnimationDuration(ms: number): void;
   setAlwaysFullAnimation(always: boolean): void;
@@ -111,6 +134,10 @@ export interface WheelController {
   /** Replaces all Presets from an export file; returns false and changes nothing if it is invalid. */
   importSettings(text: string): boolean;
 }
+
+/** Storage key of the State (drawn entries), separate from the Settings. */
+export const WHEEL_STATE_KEY = 'mywidgetbox:wheel:state';
+const STATE_VERSION = 1;
 
 export const MAX_ENTRIES = 100;
 export const MAX_LABEL_LENGTH = 100;
@@ -141,11 +168,15 @@ export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
     entries: defaultEntries,
     appearance: { ...appearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222' },
     animation: { duration: 5000, alwaysFull: false },
+    removeAfterDraw: false,
+    sound: soundDefaults,
   },
   isValid: (settings): settings is WheelSettings =>
     isEntryList((settings as WheelSettings).entries) &&
     isWheelAppearance((settings as WheelSettings).appearance) &&
-    isAnimationSettings((settings as WheelSettings).animation),
+    isAnimationSettings((settings as WheelSettings).animation) &&
+    typeof (settings as WheelSettings).removeAfterDraw === 'boolean' &&
+    isSoundSettings((settings as WheelSettings).sound),
 };
 
 function isWeight(weight: unknown): weight is number {
@@ -213,16 +244,51 @@ export function createWheelController(
   settingsOptions: SettingsStoreOptions = { readUrl: readShareLinkSettings },
 ): WheelController {
   const settings = createSettingsStore(env, wheelSettingsSchema, settingsOptions);
+  let drawn: string[] = loadDrawn();
+  let lastRemaining: WheelEntry[] = [];
   let state: WheelState = { ...fromSettings(), outcome: null, history: [], animating: false };
   const listeners = new Set<(state: WheelState) => void>();
 
+  function loadDrawn(): string[] {
+    try {
+      const data = JSON.parse(env.storage.getItem(WHEEL_STATE_KEY) ?? 'null') as { version?: unknown; drawn?: unknown } | null;
+      if (data?.version !== STATE_VERSION || !Array.isArray(data.drawn)) return [];
+      return data.drawn.filter((id): id is string => typeof id === 'string');
+    } catch {
+      return [];
+    }
+  }
+
+  function setDrawn(next: string[]) {
+    drawn = next;
+    try {
+      env.storage.setItem(WHEEL_STATE_KEY, JSON.stringify({ version: STATE_VERSION, drawn }));
+    } catch {
+      // Storage full or unavailable: keep working from memory.
+    }
+  }
+
+  /** The Settings in effect plus the drawn State, reconciled with them. */
   function fromSettings() {
     const { settings: current, presets, selectedPresetId } = settings.getSnapshot();
+    const { entries, removeAfterDraw } = current;
+    // Entries removed from the Settings (edits, Preset switch, import) are dropped from the State.
+    const ids = new Set(entries.map((entry) => entry.id));
+    if (drawn.some((id) => !ids.has(id))) setDrawn(drawn.filter((id) => ids.has(id)));
+    const remaining = removeAfterDraw ? entries.filter((entry) => !drawn.includes(entry.id)) : entries;
+    // Keep the same array while nothing changed, so the view redraws the wheel only when needed.
+    const same = remaining.length === lastRemaining.length && remaining.every((entry, i) => entry === lastRemaining[i]);
+    const remainingEntries = same ? lastRemaining : (lastRemaining = remaining);
     return {
-      entries: current.entries,
+      entries,
       appearance: current.appearance,
       animationDuration: current.animation.duration,
       alwaysFullAnimation: current.animation.alwaysFull,
+      removeAfterDraw,
+      sound: current.sound,
+      drawnEntryIds: drawn,
+      remainingEntries,
+      allDrawn: remainingEntries.length === 0,
       presets,
       selectedPresetId,
     };
@@ -274,8 +340,8 @@ export function createWheelController(
       if (isWheelAppearance(appearance)) updateSettings({ appearance });
     },
     spin() {
-      if (state.animating) return;
-      const sectors = sectorsFor(state.entries);
+      if (state.animating || state.allDrawn) return;
+      const sectors = sectorsFor(state.remainingEntries);
       const target = fraction(env.randomUint32) * 360;
       const { entry, start, end } = sectors.find((sector) => target < sector.end) ?? sectors.at(-1)!;
       const margin = (1 - LANDING_FRACTION) / 2;
@@ -284,10 +350,20 @@ export function createWheelController(
       update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT), animating: true });
     },
     finishAnimation() {
-      if (state.animating) update({ animating: false });
+      if (!state.animating) return;
+      const id = state.outcome?.entryId;
+      if (state.removeAfterDraw && id !== undefined && !drawn.includes(id)) setDrawn([...drawn, id]);
+      update({ ...fromSettings(), animating: false });
     },
     reset() {
-      if (!state.animating) update({ outcome: null, history: [] });
+      if (state.animating) return;
+      setDrawn([]);
+      update({ ...fromSettings(), outcome: null, history: [] });
+    },
+    setRemoveAfterDraw: (removeAfterDraw) => updateSettings({ removeAfterDraw }),
+    setSound(next) {
+      const sound = { ...settings.getSnapshot().settings.sound, ...next };
+      if (isSoundSettings(sound)) updateSettings({ sound });
     },
     setAnimationDuration(ms) {
       if (isValidDuration(ms)) setAnimation({ duration: ms });
