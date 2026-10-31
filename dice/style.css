@@ -36,3 +36,48 @@ body {
   padding: 0.5rem 1.5rem;
   cursor: pointer;
 }
+
+.dice__breakdown {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 16rem;
+}
+
+.dice__controls h2 {
+  margin: 0.75rem 0 0;
+  font-size: 1rem;
+}
+
+.dice__groups,
+.dice__history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dice__groups li,
+.dice__add,
+.dice__modifier {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dice__groups input,
+.dice__modifier input {
+  width: 4rem;
+}
+
+.dice__history {
+  max-height: 12rem;
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+}

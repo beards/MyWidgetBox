@@ -10,7 +10,24 @@
     <div class="dice__language" id="language"></div>
     <main class="dice">
       <button type="button" class="dice__die" id="die" aria-live="polite" data-i18n-aria-label="roll">?</button>
+      <p class="dice__breakdown" id="breakdown"></p>
       <button type="button" class="dice__roll" id="roll" data-i18n="roll"></button>
+
+      <section class="dice__controls">
+        <h2 data-i18n="diceSet"></h2>
+        <ul class="dice__groups" id="groups"></ul>
+        <div class="dice__add">
+          <select id="add-sides"></select>
+          <button type="button" id="add-die" data-i18n="addDie"></button>
+        </div>
+        <label class="dice__modifier">
+          <span data-i18n="modifier"></span>
+          <input type="number" id="modifier" step="1" value="0" />
+        </label>
+
+        <h2 data-i18n="history"></h2>
+        <ol class="dice__history" id="history"></ol>
+      </section>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

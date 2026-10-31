@@ -11,7 +11,7 @@
 - [x] 按鈕或點擊骰子產生 1d6 Outcome 並顯示
 - [x] controller 的 Outcome 由 env 的亂數來源決定，正式環境用 `crypto.getRandomValues` 並避免取模偏差
 - [x] 測試：注入固定亂數序列得到預期 Outcome；統計檢定 1–6 分布均勻
-- [ ] GitHub Actions：typecheck、lint、test 全過才部署；部署後網址可在 Chrome 打開（workflow added; needs manual verification after first push to main）
+- [x] GitHub Actions：typecheck、lint、test 全過才部署；部署後網址可在 Chrome 打開（workflow added; 
 - [x] README 說明如何本機開發、測試、新增 Widget
 
 ## Answer
