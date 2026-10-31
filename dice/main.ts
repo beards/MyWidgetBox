@@ -6,6 +6,7 @@ import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { applyDisplayMode } from '../shared/display-mode';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
+import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
 import {
   DIE_SIDES,
   MAX_DICE_PER_KIND,
@@ -42,27 +43,10 @@ const addSides = $<HTMLSelectElement>('#add-sides');
 const addButton = $<HTMLButtonElement>('#add-die');
 const modifierInput = $<HTMLInputElement>('#modifier');
 const historyList = $<HTMLOListElement>('#history');
-const presetSelect = $<HTMLSelectElement>('#preset');
-const presetName = $<HTMLInputElement>('#preset-name');
-const presetNew = $<HTMLButtonElement>('#preset-new');
-const presetDelete = $<HTMLButtonElement>('#preset-delete');
-const sharedNotice = $('#shared-notice');
-const sharedSave = $<HTMLButtonElement>('#shared-save');
-const shareDisplay = $<HTMLInputElement>('#share-display');
-const shareTransparent = $<HTMLInputElement>('#share-transparent');
-const shareCopy = $<HTMLButtonElement>('#share-copy');
-const shareStatus = $('#share-status');
-const shareUrl = $<HTMLInputElement>('#share-url');
-const settingsExport = $<HTMLButtonElement>('#settings-export');
-const settingsImport = $<HTMLInputElement>('#settings-import');
-const importError = $('#settings-import-error');
 const resetButton = $<HTMLButtonElement>('#reset');
 const durationInput = $<HTMLInputElement>('#duration');
 const durationValue = $<HTMLOutputElement>('#duration-value');
 const alwaysFullInput = $<HTMLInputElement>('#always-full');
-const soundEnabledInput = $<HTMLInputElement>('#sound-enabled');
-const soundVolumeInput = $<HTMLInputElement>('#sound-volume');
-const soundUrlInput = $<HTMLInputElement>('#sound-url');
 const shakeInput = $<HTMLInputElement>('#shake-to-roll');
 const shakeStatus = $('#shake-status');
 
@@ -83,6 +67,14 @@ const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelec
     appearancePanel.update(dice.getState().appearance);
   },
 });
+const presetPanel = mountPresetPanel(dice, i18n);
+const sharePanel = mountSharePanel(i18n, (options) => dice.shareLink(options));
+mountSettingsFilePanel(i18n, {
+  fileName: 'mywidgetbox-dice-settings.json',
+  exportSettings: () => dice.exportSettings(),
+  importSettings: (text) => dice.importSettings(text),
+});
+const soundInputs = mountSoundInputs(dice, sound, 'diceLand');
 
 function renderAddSides() {
   const selected = addSides.value || '20';
@@ -92,20 +84,12 @@ function renderAddSides() {
 }
 
 function render(state: DiceState) {
-  const { diceSet, appearance, presets, selectedPresetId, outcome, history, animating } = state;
+  const { diceSet, appearance, outcome, history, animating } = state;
   applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
   scene.setColors({ body: appearance.dieColor, label: appearance.pipColor });
   appearancePanel.update(appearance);
 
-  presetSelect.replaceChildren(
-    ...(selectedPresetId === null ? [new Option(t('sharedPreset'), '', false, true)] : []),
-    ...presets.map(({ id, name }) => new Option(name || t('unnamedPreset'), id, false, id === selectedPresetId)),
-  );
-  sharedNotice.hidden = selectedPresetId !== null;
-  const selected = presets.find((preset) => preset.id === selectedPresetId);
-  presetName.value = selected?.name ?? '';
-  presetName.disabled = !selected;
-  presetDelete.disabled = !selected || presets.length === 1;
+  presetPanel.update(state);
 
   if (animating && outcome && outcome !== playing) {
     playing = outcome;
@@ -122,10 +106,7 @@ function render(state: DiceState) {
   durationInput.value = String(state.animationDuration / 1000);
   durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
   alwaysFullInput.checked = state.alwaysFullAnimation;
-  soundEnabledInput.checked = state.sound.enabled;
-  soundVolumeInput.value = String(Math.round(state.sound.volume * 100));
-  soundVolumeInput.disabled = !state.sound.enabled;
-  if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
+  soundInputs.update(state.sound);
   shakeInput.checked = state.shakeToRoll;
   // Follows the Settings in effect, so a Preset switch or an import turns listening on or off.
   syncShakes(state.shakeToRoll);
@@ -154,7 +135,7 @@ function render(state: DiceState) {
     }),
   );
 
-  shareUrl.value = shareLink();
+  sharePanel.refresh();
 
   // While animating, the newest entry would give the Outcome away before the dice land.
   historyList.replaceChildren(
@@ -179,14 +160,6 @@ function createSceneOrFallback(container: HTMLElement): DiceScene {
 /** Before the first roll, show the dice set with every die on its highest face. */
 function restingDice({ groups }: DiceSet) {
   return groups.flatMap(({ sides, count }) => Array.from({ length: count }, () => ({ sides, value: sides })));
-}
-
-function shareLink() {
-  return dice.shareLink({
-    display: shareDisplay.checked,
-    transparent: shareTransparent.checked,
-    lang: i18n.getLocale(),
-  });
 }
 
 /** Runs an edit, then re-renders so inputs holding a value the controller rejected snap back. */
@@ -270,45 +243,10 @@ document.addEventListener('keydown', (event) => {
 });
 rollButton.addEventListener('click', () => dice.roll());
 addButton.addEventListener('click', () => dice.addDie(Number(addSides.value) as DieSides));
-presetSelect.addEventListener('change', () => dice.selectPreset(presetSelect.value));
-presetName.addEventListener('change', () => {
-  const id = dice.getState().selectedPresetId;
-  if (id) dice.renamePreset(id, presetName.value.trim());
-});
-presetNew.addEventListener('click', () => dice.createPreset(t('newPresetName', { n: dice.getState().presets.length + 1 })));
-presetDelete.addEventListener('click', () => {
-  const id = dice.getState().selectedPresetId;
-  if (id) dice.deletePreset(id);
-});
 modifierInput.addEventListener('change', () => edit(() => dice.setModifier(Number(modifierInput.value))));
-sharedSave.addEventListener('click', () => dice.createPreset(t('sharedPresetName')));
-for (const option of [shareDisplay, shareTransparent]) {
-  option.addEventListener('change', () => (shareUrl.value = shareLink()));
-}
-shareCopy.addEventListener('click', async () => {
-  const link = shareLink();
-  shareUrl.value = link;
-  try {
-    await navigator.clipboard.writeText(link);
-    shareStatus.textContent = t('copied');
-  } catch {
-    // Clipboard refused (insecure context, permission): let the user copy by hand.
-    shareStatus.textContent = t('copyFailed');
-    shareUrl.select();
-  }
-});
-shareUrl.addEventListener('focus', () => shareUrl.select());
 resetButton.addEventListener('click', () => dice.reset());
 durationInput.addEventListener('input', () => dice.setAnimationDuration(Number(durationInput.value) * 1000));
 alwaysFullInput.addEventListener('change', () => dice.setAlwaysFullAnimation(alwaysFullInput.checked));
-soundEnabledInput.addEventListener('change', () => dice.setSound({ enabled: soundEnabledInput.checked }));
-soundVolumeInput.addEventListener('input', () => dice.setSound({ volume: Number(soundVolumeInput.value) / 100 }));
-// Preview the volume once the slider is released.
-soundVolumeInput.addEventListener('change', () => sound.play('diceLand', dice.getState().sound));
-soundUrlInput.addEventListener('change', () => {
-  edit(() => dice.setSound({ url: soundUrlInput.value.trim() }));
-  soundUrlInput.value = dice.getState().sound.url;
-});
 
 shakeInput.addEventListener('change', () => {
   // Called right in the gesture: iOS only grants motion access from one.
@@ -317,17 +255,4 @@ shakeInput.addEventListener('change', () => {
     void startShakes();
   }
   dice.setShakeToRoll(shakeInput.checked);
-});
-settingsExport.addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));
-  link.download = 'mywidgetbox-dice-settings.json';
-  link.click();
-  URL.revokeObjectURL(link.href);
-});
-settingsImport.addEventListener('change', async () => {
-  const file = settingsImport.files?.[0];
-  if (!file) return;
-  importError.textContent = dice.importSettings(await file.text()) ? '' : t('importError');
-  settingsImport.value = '';
 });

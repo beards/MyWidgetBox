@@ -7,6 +7,7 @@ import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
+import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
 import { createWakeLock } from '../shared/wake-lock';
 import {
   MAX_DURATION,
@@ -34,28 +35,12 @@ const t = i18n.t;
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const list = $('#timers');
-const presetSelect = $<HTMLSelectElement>('#preset');
-const presetName = $<HTMLInputElement>('#preset-name');
-const presetNew = $<HTMLButtonElement>('#preset-new');
-const presetDelete = $<HTMLButtonElement>('#preset-delete');
-const sharedNotice = $('#shared-notice');
-const sharedSave = $<HTMLButtonElement>('#shared-save');
 const shareDisplay = $<HTMLInputElement>('#share-display');
-const shareTransparent = $<HTMLInputElement>('#share-transparent');
 const shareTimer = $<HTMLSelectElement>('#share-timer');
 const timerAdd = $<HTMLButtonElement>('#timer-add');
 const showFraction = $<HTMLInputElement>('#show-fraction');
-const shareCopy = $<HTMLButtonElement>('#share-copy');
-const shareStatus = $('#share-status');
-const shareUrl = $<HTMLInputElement>('#share-url');
-const settingsExport = $<HTMLButtonElement>('#settings-export');
-const settingsImport = $<HTMLInputElement>('#settings-import');
-const importError = $('#settings-import-error');
 const alertSoundSeconds = $<HTMLInputElement>('#alert-sound-seconds');
 const alertEffectSeconds = $<HTMLInputElement>('#alert-effect-seconds');
-const soundEnabledInput = $<HTMLInputElement>('#sound-enabled');
-const soundVolumeInput = $<HTMLInputElement>('#sound-volume');
-const soundUrlInput = $<HTMLInputElement>('#sound-url');
 
 const sound = createSoundPlayer();
 const wakeLock = createWakeLock();
@@ -69,6 +54,17 @@ const appearancePanel = mountAppearancePanel<Appearance>($('#appearance'), {
     appearancePanel.update(timer.getState().appearance);
   },
 });
+const presetPanel = mountPresetPanel(timer, i18n);
+const sharePanel = mountSharePanel(i18n, (options) =>
+  // `?timer=` only applies in Display mode.
+  timer.shareLink({ ...options, timer: options.display && shareTimer.value ? shareTimer.value : undefined }),
+);
+mountSettingsFilePanel(i18n, {
+  fileName: 'mywidgetbox-timer-settings.json',
+  exportSettings: () => timer.exportSettings(),
+  importSettings: (text) => timer.importSettings(text),
+});
+const soundInputs = mountSoundInputs(timer, sound, 'alert');
 
 const MODE_LABELS = { countdown: 'modeCountdown', targetTime: 'modeTargetTime', stopwatch: 'modeStopwatch' } as const;
 
@@ -254,7 +250,7 @@ function labelled(input: HTMLElement) {
 const cards = new Map<string, TimerCard>();
 
 function render(state: TimerState) {
-  const { appearance, presets, selectedPresetId } = state;
+  const { appearance } = state;
   // Display mode can be limited to one timer (`?timer=<id>`); the others get no card.
   const timers = visibleTimers(state.timers, env.url);
   applyAppearance(appearance, { page: document.documentElement, display: list }, { forceTransparent: displayOptions.transparent });
@@ -274,21 +270,10 @@ function render(state: TimerState) {
     list.replaceChildren(...roots);
   }
 
-  presetSelect.replaceChildren(
-    ...(selectedPresetId === null ? [new Option(t('sharedPreset'), '', false, true)] : []),
-    ...presets.map(({ id, name }) => new Option(name || t('unnamedPreset'), id, false, id === selectedPresetId)),
-  );
-  sharedNotice.hidden = selectedPresetId !== null;
-  const selected = presets.find((preset) => preset.id === selectedPresetId);
-  presetName.value = selected?.name ?? '';
-  presetName.disabled = !selected;
-  presetDelete.disabled = !selected || presets.length === 1;
+  presetPanel.update(state);
   alertSoundSeconds.value = String(state.alert.soundSeconds);
   alertEffectSeconds.value = String(state.alert.effectSeconds);
-  soundEnabledInput.checked = state.sound.enabled;
-  soundVolumeInput.value = String(Math.round(state.sound.volume * 100));
-  soundVolumeInput.disabled = !state.sound.enabled;
-  if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
+  soundInputs.update(state.sound);
   showFraction.checked = state.showFraction;
   const sharedTimer = state.timers.some((view) => view.id === shareTimer.value) ? shareTimer.value : '';
   shareTimer.replaceChildren(
@@ -296,7 +281,7 @@ function render(state: TimerState) {
     ...state.timers.map((view, index) => new Option(timerLabel(view, index), view.id, false, view.id === sharedTimer)),
   );
   shareTimer.disabled = !shareDisplay.checked;
-  shareUrl.value = shareLink();
+  sharePanel.refresh();
 }
 
 // The shown value is computed from the clock on every frame, so throttled or hidden tabs
@@ -334,15 +319,6 @@ function checkAlerts() {
   wakeLock.set(wantsWakeLock(shown, env.now()));
 }
 
-function shareLink() {
-  return timer.shareLink({
-    display: shareDisplay.checked,
-    transparent: shareTransparent.checked,
-    lang: i18n.getLocale(),
-    timer: shareDisplay.checked && shareTimer.value ? shareTimer.value : undefined,
-  });
-}
-
 timer.subscribe(render);
 i18n.subscribe(() => render(timer.getState()));
 render(timer.getState());
@@ -365,38 +341,10 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-presetSelect.addEventListener('change', () => timer.selectPreset(presetSelect.value));
-presetName.addEventListener('change', () => {
-  const id = timer.getState().selectedPresetId;
-  if (id) timer.renamePreset(id, presetName.value.trim());
-});
-presetNew.addEventListener('click', () => timer.createPreset(t('newPresetName', { n: timer.getState().presets.length + 1 })));
-presetDelete.addEventListener('click', () => {
-  const id = timer.getState().selectedPresetId;
-  if (id) timer.deletePreset(id);
-});
-sharedSave.addEventListener('click', () => timer.createPreset(t('sharedPresetName')));
-for (const option of [shareDisplay, shareTransparent, shareTimer]) {
-  option.addEventListener('change', () => {
-    shareTimer.disabled = !shareDisplay.checked;
-    shareUrl.value = shareLink();
-  });
-}
+shareDisplay.addEventListener('change', () => (shareTimer.disabled = !shareDisplay.checked));
+shareTimer.addEventListener('change', () => sharePanel.refresh());
 timerAdd.addEventListener('click', () => timer.addTimer());
 showFraction.addEventListener('change', () => timer.setShowFraction(showFraction.checked));
-shareCopy.addEventListener('click', async () => {
-  const link = shareLink();
-  shareUrl.value = link;
-  try {
-    await navigator.clipboard.writeText(link);
-    shareStatus.textContent = t('copied');
-  } catch {
-    // Clipboard refused (insecure context, permission): let the user copy by hand.
-    shareStatus.textContent = t('copyFailed');
-    shareUrl.select();
-  }
-});
-shareUrl.addEventListener('focus', () => shareUrl.select());
 alertSoundSeconds.addEventListener('change', () => {
   timer.setAlert({ soundSeconds: Number(alertSoundSeconds.value) });
   alertSoundSeconds.value = String(timer.getState().alert.soundSeconds);
@@ -404,25 +352,4 @@ alertSoundSeconds.addEventListener('change', () => {
 alertEffectSeconds.addEventListener('change', () => {
   timer.setAlert({ effectSeconds: Number(alertEffectSeconds.value) });
   alertEffectSeconds.value = String(timer.getState().alert.effectSeconds);
-});
-soundEnabledInput.addEventListener('change', () => timer.setSound({ enabled: soundEnabledInput.checked }));
-soundVolumeInput.addEventListener('input', () => timer.setSound({ volume: Number(soundVolumeInput.value) / 100 }));
-// Preview the volume once the slider is released.
-soundVolumeInput.addEventListener('change', () => sound.play('alert', timer.getState().sound));
-soundUrlInput.addEventListener('change', () => {
-  timer.setSound({ url: soundUrlInput.value.trim() });
-  soundUrlInput.value = timer.getState().sound.url;
-});
-settingsExport.addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([timer.exportSettings()], { type: 'application/json' }));
-  link.download = 'mywidgetbox-timer-settings.json';
-  link.click();
-  URL.revokeObjectURL(link.href);
-});
-settingsImport.addEventListener('change', async () => {
-  const file = settingsImport.files?.[0];
-  if (!file) return;
-  importError.textContent = timer.importSettings(await file.text()) ? '' : t('importError');
-  settingsImport.value = '';
 });

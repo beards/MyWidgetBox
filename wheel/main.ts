@@ -6,6 +6,7 @@ import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
+import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
 import {
   MAX_ENTRIES,
   MAX_LABEL_LENGTH,
@@ -41,28 +42,11 @@ const resetButton = $<HTMLButtonElement>('#reset');
 const entryList = $<HTMLOListElement>('#entries');
 const addEntryButton = $<HTMLButtonElement>('#add-entry');
 const historyList = $<HTMLOListElement>('#history');
-const presetSelect = $<HTMLSelectElement>('#preset');
-const presetName = $<HTMLInputElement>('#preset-name');
-const presetNew = $<HTMLButtonElement>('#preset-new');
-const presetDelete = $<HTMLButtonElement>('#preset-delete');
-const sharedNotice = $('#shared-notice');
-const sharedSave = $<HTMLButtonElement>('#shared-save');
-const shareDisplay = $<HTMLInputElement>('#share-display');
-const shareTransparent = $<HTMLInputElement>('#share-transparent');
-const shareCopy = $<HTMLButtonElement>('#share-copy');
-const shareStatus = $('#share-status');
-const shareUrl = $<HTMLInputElement>('#share-url');
-const settingsExport = $<HTMLButtonElement>('#settings-export');
-const settingsImport = $<HTMLInputElement>('#settings-import');
-const importError = $('#settings-import-error');
 const durationInput = $<HTMLInputElement>('#duration');
 const durationValue = $<HTMLOutputElement>('#duration-value');
 const alwaysFullInput = $<HTMLInputElement>('#always-full');
 const removeAfterDrawInput = $<HTMLInputElement>('#remove-after-draw');
 const allDrawnNotice = $('#all-drawn');
-const soundEnabledInput = $<HTMLInputElement>('#sound-enabled');
-const soundVolumeInput = $<HTMLInputElement>('#sound-volume');
-const soundUrlInput = $<HTMLInputElement>('#sound-url');
 
 const scene = createWheelScene(stage);
 const sound = createSoundPlayer();
@@ -86,6 +70,14 @@ const appearancePanel = mountAppearancePanel<WheelAppearance>($('#appearance'), 
     appearancePanel.update(wheel.getState().appearance);
   },
 });
+const presetPanel = mountPresetPanel(wheel, i18n);
+const sharePanel = mountSharePanel(i18n, (options) => wheel.shareLink(options));
+const settingsFilePanel = mountSettingsFilePanel(i18n, {
+  fileName: 'mywidgetbox-wheel-settings.json',
+  exportSettings: () => wheel.exportSettings(),
+  importSettings: (text) => wheel.importSettings(text),
+});
+const soundInputs = mountSoundInputs(wheel, sound, 'tick');
 
 function showResult(outcome: WheelOutcome) {
   result.textContent = outcome.label;
@@ -105,7 +97,7 @@ function hideResult() {
 }
 
 function render(state: WheelState) {
-  const { entries, appearance, presets, selectedPresetId, outcome, history, animating, remainingEntries, allDrawn } = state;
+  const { entries, appearance, outcome, history, animating, remainingEntries, allDrawn } = state;
   applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
   scene.setColors({ label: appearance.labelColor, pointer: appearance.pointerColor });
   appearancePanel.update(appearance);
@@ -123,15 +115,6 @@ function render(state: WheelState) {
   }
   allDrawnNotice.hidden = !allDrawn;
 
-  presetSelect.replaceChildren(
-    ...(selectedPresetId === null ? [new Option(t('sharedPreset'), '', false, true)] : []),
-    ...presets.map(({ id, name }) => new Option(name || t('unnamedPreset'), id, false, id === selectedPresetId)),
-  );
-  sharedNotice.hidden = selectedPresetId !== null;
-  const selected = presets.find((preset) => preset.id === selectedPresetId);
-  presetName.value = selected?.name ?? '';
-  presetName.disabled = !selected;
-  presetDelete.disabled = !selected || presets.length === 1 || animating;
 
   if (animating && outcome && outcome !== playing) {
     playing = outcome;
@@ -147,18 +130,15 @@ function render(state: WheelState) {
   // The controller ignores these mid-spin (the Outcome must match the wheel shown); say so in the UI.
   addEntryButton.disabled = animating || entries.length >= MAX_ENTRIES;
   entryList.inert = animating;
-  for (const control of [presetSelect, presetNew, sharedSave, settingsImport, removeAfterDrawInput]) {
-    control.disabled = animating;
-  }
+  presetPanel.update(state, { locked: animating });
+  settingsFilePanel.update({ locked: animating });
+  removeAfterDrawInput.disabled = animating;
   durationInput.value = String(state.animationDuration / 1000);
   durationValue.textContent = t('seconds', { seconds: state.animationDuration / 1000 });
   alwaysFullInput.checked = state.alwaysFullAnimation;
   removeAfterDrawInput.checked = state.removeAfterDraw;
-  soundEnabledInput.checked = state.sound.enabled;
-  soundVolumeInput.value = String(Math.round(state.sound.volume * 100));
-  soundVolumeInput.disabled = !state.sound.enabled;
-  if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
-  shareUrl.value = shareLink();
+  soundInputs.update(state.sound);
+  sharePanel.refresh();
 
   // While spinning, the newest entry would give the Outcome away before the wheel stops.
   historyList.replaceChildren(
@@ -221,14 +201,6 @@ function formatPercent(percent: number) {
   return percent >= 10 ? percent.toFixed(0) : percent.toFixed(1);
 }
 
-function shareLink() {
-  return wheel.shareLink({
-    display: shareDisplay.checked,
-    transparent: shareTransparent.checked,
-    lang: i18n.getLocale(),
-  });
-}
-
 /** Runs an edit, then redraws the editor so inputs holding a value the controller rejected snap back. */
 function edit(action: () => void) {
   action();
@@ -261,55 +233,6 @@ document.addEventListener('keydown', (event) => {
 addEntryButton.addEventListener('click', () =>
   wheel.addEntry(t('newEntryLabel', { n: wheel.getState().entries.length + 1 })),
 );
-presetSelect.addEventListener('change', () => wheel.selectPreset(presetSelect.value));
-presetName.addEventListener('change', () => {
-  const id = wheel.getState().selectedPresetId;
-  if (id) wheel.renamePreset(id, presetName.value.trim());
-});
-presetNew.addEventListener('click', () => wheel.createPreset(t('newPresetName', { n: wheel.getState().presets.length + 1 })));
-presetDelete.addEventListener('click', () => {
-  const id = wheel.getState().selectedPresetId;
-  if (id) wheel.deletePreset(id);
-});
-sharedSave.addEventListener('click', () => wheel.createPreset(t('sharedPresetName')));
-for (const option of [shareDisplay, shareTransparent]) {
-  option.addEventListener('change', () => (shareUrl.value = shareLink()));
-}
-shareCopy.addEventListener('click', async () => {
-  const link = shareLink();
-  shareUrl.value = link;
-  try {
-    await navigator.clipboard.writeText(link);
-    shareStatus.textContent = t('copied');
-  } catch {
-    // Clipboard refused (insecure context, permission): let the user copy by hand.
-    shareStatus.textContent = t('copyFailed');
-    shareUrl.select();
-  }
-});
-shareUrl.addEventListener('focus', () => shareUrl.select());
 durationInput.addEventListener('input', () => wheel.setAnimationDuration(Number(durationInput.value) * 1000));
 alwaysFullInput.addEventListener('change', () => wheel.setAlwaysFullAnimation(alwaysFullInput.checked));
 removeAfterDrawInput.addEventListener('change', () => wheel.setRemoveAfterDraw(removeAfterDrawInput.checked));
-soundEnabledInput.addEventListener('change', () => wheel.setSound({ enabled: soundEnabledInput.checked }));
-soundVolumeInput.addEventListener('input', () => wheel.setSound({ volume: Number(soundVolumeInput.value) / 100 }));
-// A sample tick once the volume is chosen.
-soundVolumeInput.addEventListener('change', () => sound.play('tick', wheel.getState().sound));
-soundUrlInput.addEventListener('change', () => {
-  wheel.setSound({ url: soundUrlInput.value.trim() });
-  // An invalid URL was ignored: show the one still in effect.
-  soundUrlInput.value = wheel.getState().sound.url;
-});
-settingsExport.addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([wheel.exportSettings()], { type: 'application/json' }));
-  link.download = 'mywidgetbox-wheel-settings.json';
-  link.click();
-  URL.revokeObjectURL(link.href);
-});
-settingsImport.addEventListener('change', async () => {
-  const file = settingsImport.files?.[0];
-  if (!file) return;
-  importError.textContent = wheel.importSettings(await file.text()) ? '' : t('importError');
-  settingsImport.value = '';
-});
