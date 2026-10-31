@@ -35,6 +35,25 @@ body {
   gap: 0.75rem;
 }
 
+/* Time-up screen effect: the card flashes while the alert lasts. */
+.timer__card[data-alert] {
+  animation: timer-flash 1s steps(1, end) infinite;
+}
+
+@keyframes timer-flash {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timer__card[data-alert] {
+    animation: none;
+    outline: 0.25rem solid currentColor;
+    outline-offset: 0.5rem;
+  }
+}
+
 .timer__value {
   margin: 0;
   font-size: 1em;
@@ -112,6 +131,27 @@ body {
   width: 8rem;
 }
 
+.timer__alert {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.timer__alert label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.timer__alert input[type='number'] {
+  width: 4rem;
+}
+
+.timer__alert input[type='url'] {
+  width: 12rem;
+}
+
 .timer__appearance {
   display: flex;
   flex-direction: column;
@@ -119,6 +159,7 @@ body {
 }
 
 .timer__appearance [hidden],
+.timer__actions [hidden],
 .timer__shared[hidden] {
   display: none;
 }

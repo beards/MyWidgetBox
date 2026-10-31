@@ -13,6 +13,7 @@ import {
   readDisplayOptions,
   readShareLinkSettings,
 } from '../shared/share-link';
+import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
 
 export const TIMER_MODES = ['countdown', 'targetTime', 'stopwatch'] as const;
 /**
@@ -34,6 +35,14 @@ export interface TimerConfig {
   target: string;
 }
 
+/** What happens when a countdown runs out; shared by all timers on the page. */
+export interface TimerAlertSettings {
+  /** How long the alert sound repeats, in whole seconds (1..MAX_ALERT_SOUND_SECONDS). */
+  soundSeconds: number;
+  /** How long the screen effect lasts, in whole seconds (0..MAX_ALERT_EFFECT_SECONDS); 0 = until stopped. */
+  effectSeconds: number;
+}
+
 /** What the timer remembers and shares; one value per Preset. */
 export interface TimerSettings {
   /** The timers on the page, in display order; always at least one. */
@@ -41,6 +50,8 @@ export interface TimerSettings {
   /** Show hundredths of a second on every timer. */
   showFraction: boolean;
   appearance: Appearance;
+  alert: TimerAlertSettings;
+  sound: SoundSettings;
 }
 
 /**
@@ -52,6 +63,13 @@ export interface TimerRun {
   startedAt: number | null;
   /** Time run before startedAt (sum of the earlier running spans), in ms. */
   elapsed: number;
+  /**
+   * The time-up alert of this run: `fired` once it has been handed to the view (so a reload
+   * never replays it), `stopped` once the user stopped it. Absent before time is up.
+   */
+  alert?: 'fired' | 'stopped';
+  /** The time-up moment `alert` refers to; set (and only checked) for `targetTime` timers. */
+  alertUpAt?: number;
 }
 
 export type TimerStatus = 'idle' | 'running' | 'paused' | 'timeUp';
@@ -65,6 +83,8 @@ export interface TimerState {
   timers: TimerView[];
   showFraction: boolean;
   appearance: Appearance;
+  alert: TimerAlertSettings;
+  sound: SoundSettings;
   presets: PresetSummary[];
   /** null while Settings opened from a Share link are in effect and not saved. */
   selectedPresetId: string | null;
@@ -95,6 +115,13 @@ export function visibleTimers<T extends { id: string }>(timers: T[], url: URL): 
   return match.length > 0 ? match : timers;
 }
 
+/** A time-up alert the view should play now. */
+export interface DueAlert {
+  id: string;
+  /** How long the sound should still repeat, in ms (the time up may have been a moment ago). */
+  soundMs: number;
+}
+
 export interface TimerController {
   getState(): TimerState;
   /** Calls listener after every state change (not on clock ticks); returns an unsubscribe function. */
@@ -117,6 +144,18 @@ export interface TimerController {
   removeTimer(id: string): void;
   /** Sets a timer's name (may be empty); keeps its run. */
   renameTimer(id: string, name: string): void;
+  /**
+   * The timers whose time is up and whose alert has not fired yet, marked as fired (in the State)
+   * so each time up alerts once, also across reloads. A time up whose sound time has already
+   * passed (e.g. it ran out while the page was closed) is marked without being returned.
+   */
+  takeDueAlerts(): DueAlert[];
+  /** Stops the alert (sound and effect) of a timer whose time is up. */
+  stopAlert(id: string): void;
+  /** Changes some alert Settings; ignored if the result is invalid. */
+  setAlert(next: Partial<TimerAlertSettings>): void;
+  /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
+  setSound(next: Partial<SoundSettings>): void;
   /** Replaces the appearance (applied live); invalid appearances are ignored. */
   setAppearance(appearance: Appearance): void;
   setShowFraction(on: boolean): void;
@@ -135,6 +174,9 @@ export interface TimerController {
 export const MIN_DURATION = 1000;
 /** 99:59:59. */
 export const MAX_DURATION = (99 * 3600 + 59 * 60 + 59) * 1000;
+
+export const MAX_ALERT_SOUND_SECONDS = 60;
+export const MAX_ALERT_EFFECT_SECONDS = 3600;
 
 /** Storage key of the State (running timers), separate from the Settings. */
 export const TIMER_STATE_KEY = 'mywidgetbox:timer:state';
@@ -157,6 +199,8 @@ export const timerSettingsSchema: SettingsSchema<TimerSettings> = {
     timers: [{ id: '1', name: '', mode: 'countdown', duration: 5 * 60 * 1000, target: DEFAULT_TARGET }],
     showFraction: false,
     appearance: { ...appearanceDefaults, fontSize: 96 },
+    alert: { soundSeconds: 5, effectSeconds: 10 },
+    sound: soundDefaults,
   },
   migrations: {
     // Ticket 13 added `target` to every timer.
@@ -170,8 +214,19 @@ export const timerSettingsSchema: SettingsSchema<TimerSettings> = {
   isValid: (settings): settings is TimerSettings =>
     isTimerList((settings as TimerSettings).timers) &&
     typeof (settings as TimerSettings).showFraction === 'boolean' &&
-    isAppearance((settings as TimerSettings).appearance),
+    isAppearance((settings as TimerSettings).appearance) &&
+    isAlertSettings((settings as TimerSettings).alert) &&
+    isSoundSettings((settings as TimerSettings).sound),
 };
+
+function isWholeSeconds(value: unknown, min: number, max: number): value is number {
+  return Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+}
+
+function isAlertSettings(value: unknown): value is TimerAlertSettings {
+  const { soundSeconds, effectSeconds } = (value ?? {}) as Partial<TimerAlertSettings>;
+  return isWholeSeconds(soundSeconds, 1, MAX_ALERT_SOUND_SECONDS) && isWholeSeconds(effectSeconds, 0, MAX_ALERT_EFFECT_SECONDS);
+}
 
 function isValidDuration(ms: unknown): ms is number {
   return Number.isInteger(ms) && (ms as number) % 1000 === 0 && (ms as number) >= MIN_DURATION && (ms as number) <= MAX_DURATION;
@@ -228,6 +283,33 @@ export function readTimer({ mode, duration, target, run }: TimerView, now: numbe
   if (mode === 'countdown' && elapsed >= duration) return { value: 0, status: 'timeUp' };
   const status: TimerStatus = running ? 'running' : elapsed > 0 ? 'paused' : 'idle';
   return { value: mode === 'countdown' ? duration - elapsed : elapsed, status };
+}
+
+/**
+ * env.now() at which a running countdown runs (or ran) out; null if it is not counting towards one.
+ * For `targetTime`, the deadline in effect at `now` (see targetDeadline): the one that just
+ * passed while time is up, else the next one.
+ */
+export function timeUpAt({ mode, duration, target, run }: TimerView, now: number): number | null {
+  if (mode === 'targetTime') return targetDeadline(target, now);
+  if (mode !== 'countdown' || run.startedAt === null) return null;
+  return run.startedAt + duration - run.elapsed;
+}
+
+/**
+ * The alert marker of the run that applies to the time up at `upAt`. A `targetTime` timer
+ * recurs daily, so its marker only counts for the deadline it was set for.
+ */
+function alertMarker(timer: TimerView, upAt: number): TimerRun['alert'] {
+  if (timer.mode === 'targetTime' && timer.run.alertUpAt !== upAt) return undefined;
+  return timer.run.alert;
+}
+
+/** Whether a timer's time-up screen effect shows at time `now`. */
+export function readAlert(timer: TimerView, now: number, alert: TimerAlertSettings): { effect: boolean } {
+  const upAt = timeUpAt(timer, now);
+  if (upAt === null || now < upAt || alertMarker(timer, upAt) === 'stopped') return { effect: false };
+  return { effect: alert.effectSeconds === 0 || now < upAt + alert.effectSeconds * 1000 };
 }
 
 /**
@@ -288,6 +370,8 @@ export function createTimerController(
       timers: current.timers.map((timer) => ({ ...timer, run: runs[timer.id] ?? IDLE })),
       showFraction: current.showFraction,
       appearance: current.appearance,
+      alert: current.alert,
+      sound: current.sound,
       presets,
       selectedPresetId,
     };
@@ -374,6 +458,41 @@ export function createTimerController(
       const timers = current.timers.map((entry) => (entry.id === id ? { ...entry, name } : entry));
       changeSettings(() => settings.update({ ...current, timers }));
     },
+    takeDueAlerts() {
+      const now = env.now();
+      const due: DueAlert[] = [];
+      let changed = false;
+      for (const view of state.timers) {
+        const upAt = timeUpAt(view, now);
+        if (upAt === null || now < upAt || alertMarker(view, upAt)) continue;
+        runs = { ...runs, [view.id]: { ...view.run, alert: 'fired', alertUpAt: upAt } };
+        changed = true;
+        const soundMs = upAt + state.alert.soundSeconds * 1000 - now;
+        if (soundMs > 0) due.push({ id: view.id, soundMs });
+      }
+      if (changed) {
+        saveRuns();
+        publish();
+      }
+      return due;
+    },
+    stopAlert(id) {
+      const now = env.now();
+      const view = state.timers.find((timer) => timer.id === id);
+      const upAt = view && timeUpAt(view, now);
+      if (!view || !upAt || readTimer(view, now).status !== 'timeUp' || alertMarker(view, upAt) === 'stopped') return;
+      setRun(id, { ...view.run, alert: 'stopped', alertUpAt: upAt });
+    },
+    setAlert(next) {
+      const current = settings.getSnapshot().settings;
+      const alert = { ...current.alert, ...next };
+      if (isAlertSettings(alert)) changeSettings(() => settings.update({ ...current, alert }));
+    },
+    setSound(next) {
+      const current = settings.getSnapshot().settings;
+      const sound = { ...current.sound, ...next };
+      if (isSoundSettings(sound)) changeSettings(() => settings.update({ ...current, sound }));
+    },
     setAppearance(appearance) {
       if (!isAppearance(appearance)) return;
       changeSettings(() => settings.update({ ...settings.getSnapshot().settings, appearance }));
@@ -404,12 +523,14 @@ export function createTimerController(
 
 function isTimerRun(value: unknown): value is TimerRun {
   if (!isRecord(value)) return false;
-  const { startedAt, elapsed } = value;
+  const { startedAt, elapsed, alert, alertUpAt } = value;
   return (
+    (alertUpAt === undefined || (typeof alertUpAt === 'number' && Number.isFinite(alertUpAt))) &&
     (startedAt === null || (typeof startedAt === 'number' && Number.isFinite(startedAt))) &&
     typeof elapsed === 'number' &&
     Number.isFinite(elapsed) &&
-    elapsed >= 0
+    elapsed >= 0 &&
+    (alert === undefined || alert === 'fired' || alert === 'stopped')
   );
 }
 

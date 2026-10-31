@@ -9,6 +9,13 @@ export type TimerMessageKey =
   | 'pause'
   | 'reset'
   | 'timeUp'
+  | 'stopAlert'
+  | 'alert'
+  | 'alertSoundSeconds'
+  | 'alertEffectSeconds'
+  | 'soundEnabled'
+  | 'soundVolume'
+  | 'soundUrl'
   | 'mode'
   | 'modeCountdown'
   | 'modeStopwatch'
@@ -46,6 +53,13 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
     pause: 'Pause',
     reset: 'Reset',
     timeUp: "Time's up",
+    stopAlert: 'Stop alert',
+    alert: "Time's up alert",
+    alertSoundSeconds: 'Sound length (seconds)',
+    alertEffectSeconds: 'Flash length (seconds, 0 = until stopped)',
+    soundEnabled: "Play a sound when time's up",
+    soundVolume: 'Volume',
+    soundUrl: 'Custom sound URL (empty = built-in)',
     mode: 'Mode',
     modeCountdown: 'Countdown',
     modeStopwatch: 'Stopwatch',
@@ -82,6 +96,13 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
     pause: '暫停',
     reset: '重置',
     timeUp: '時間到',
+    stopAlert: '停止提示',
+    alert: '時間到提示',
+    alertSoundSeconds: '提示音長度（秒）',
+    alertEffectSeconds: '閃爍長度（秒，0＝直到停止）',
+    soundEnabled: '時間到時播放提示音',
+    soundVolume: '音量',
+    soundUrl: '自訂音效網址（留空＝內建音效）',
     mode: '模式',
     modeCountdown: '倒數',
     modeStopwatch: '碼表',
