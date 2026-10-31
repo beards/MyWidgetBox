@@ -7,6 +7,10 @@ export type DiceMessageKey =
   | 'animationDuration'
   | 'seconds'
   | 'alwaysFullAnimation'
+  | 'sound'
+  | 'soundEnabled'
+  | 'soundVolume'
+  | 'soundUrl'
   | 'diceSet'
   | 'addDie'
   | 'removeDie'
@@ -42,6 +46,10 @@ export const messages: MessageTables<DiceMessageKey> = {
     animationDuration: 'Animation length',
     seconds: '{seconds} s',
     alwaysFullAnimation: 'Always play the full animation (ignore reduced motion)',
+    sound: 'Sound',
+    soundEnabled: 'Play a sound when the dice land',
+    soundVolume: 'Volume',
+    soundUrl: 'Custom sound URL (empty = built-in)',
     diceSet: 'Dice set',
     addDie: 'Add',
     removeDie: 'Remove {label}',
@@ -76,6 +84,10 @@ export const messages: MessageTables<DiceMessageKey> = {
     animationDuration: '動畫長度',
     seconds: '{seconds} 秒',
     alwaysFullAnimation: '永遠播放完整動畫（忽略「減少動態效果」）',
+    sound: '音效',
+    soundEnabled: '骰子落地時播放音效',
+    soundVolume: '音量',
+    soundUrl: '自訂音效網址（留空＝內建音效）',
     diceSet: '骰組',
     addDie: '加入',
     removeDie: '移除 {label}',

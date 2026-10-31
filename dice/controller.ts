@@ -8,6 +8,7 @@ import {
   serializeSettings,
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
+import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
 
 export const DIE_SIDES = [4, 6, 8, 10, 12, 20, 100] as const;
 export type DieSides = (typeof DIE_SIDES)[number];
@@ -40,6 +41,8 @@ export interface DiceOutcome {
 export interface DiceSettings {
   diceSet: DiceSet;
   animation: AnimationSettings;
+  /** Played when the dice land. */
+  sound: SoundSettings;
 }
 
 export interface AnimationSettings {
@@ -63,6 +66,8 @@ export interface DiceState {
   /** The animation Settings in effect (see AnimationSettings). */
   animationDuration: number;
   alwaysFullAnimation: boolean;
+  /** The sound Settings in effect; the view plays the landing sound with them. */
+  sound: SoundSettings;
 }
 
 export interface DiceController {
@@ -86,6 +91,8 @@ export interface DiceController {
   /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
   setAnimationDuration(ms: number): void;
   setAlwaysFullAnimation(always: boolean): void;
+  /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
+  setSound(next: Partial<SoundSettings>): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
   selectPreset(id: string): void;
@@ -114,9 +121,12 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
   defaults: {
     diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
     animation: { duration: 3000, alwaysFull: false },
+    sound: soundDefaults,
   },
   isValid: (settings): settings is DiceSettings =>
-    isDiceSet((settings as DiceSettings).diceSet) && isAnimationSettings((settings as DiceSettings).animation),
+    isDiceSet((settings as DiceSettings).diceSet) &&
+    isAnimationSettings((settings as DiceSettings).animation) &&
+    isSoundSettings((settings as DiceSettings).sound),
 };
 
 function isValidDuration(duration: unknown): duration is number {
@@ -168,6 +178,7 @@ export function createDiceController(
       diceSet: current.diceSet,
       animationDuration: current.animation.duration,
       alwaysFullAnimation: current.animation.alwaysFull,
+      sound: current.sound,
       presets,
       selectedPresetId,
     };
@@ -249,6 +260,10 @@ export function createDiceController(
       if (isValidDuration(ms)) setAnimation({ duration: ms });
     },
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
+    setSound(next) {
+      const sound = { ...settings.getSnapshot().settings.sound, ...next };
+      if (isSoundSettings(sound)) updateSettings({ sound });
+    },
     createPreset: (name) => changeSettings(() => settings.createPreset(name)),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),

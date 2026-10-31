@@ -248,6 +248,26 @@ describe('dice controller', () => {
     expect(animationFor(dice.getState(), true)).toEqual({ duration: 3000, reduced: false });
   });
 
+  it('has sound on at a moderate volume with the built-in sound by default', () => {
+    const dice = createDiceController(createTestEnv());
+    expect(dice.getState().sound).toEqual({ enabled: true, volume: 0.7, url: '' });
+  });
+
+  it('can turn sound off, change the volume and use a custom sound URL', () => {
+    const dice = createDiceController(createTestEnv());
+    dice.setSound({ enabled: false });
+    dice.setSound({ volume: 0.25 });
+    dice.setSound({ url: 'https://example.test/clack.mp3' });
+    expect(dice.getState().sound).toEqual({ enabled: false, volume: 0.25, url: 'https://example.test/clack.mp3' });
+  });
+
+  it('ignores invalid sound changes', () => {
+    const dice = createDiceController(createTestEnv());
+    dice.setSound({ volume: 2 });
+    dice.setSound({ url: 'javascript:alert(1)' });
+    expect(dice.getState().sound).toEqual({ enabled: true, volume: 0.7, url: '' });
+  });
+
   // Chi-square critical values at p = 0.001 for (sides - 1) degrees of freedom.
   const CRITICAL_VALUES: Record<DieSides, number> = {
     4: 16.266,
@@ -304,6 +324,20 @@ describe('dice Settings persistence and Presets', () => {
     const after = createDiceController(env);
     expect(after.getState().animationDuration).toBe(6500);
     expect(after.getState().alwaysFullAnimation).toBe(true);
+  });
+
+  it('remembers sound settings after a reload and per Preset', () => {
+    const env = createTestEnv();
+    const before = createDiceController(env);
+    const first = before.getState().selectedPresetId!;
+    before.setSound({ volume: 0.3, url: 'https://example.test/clack.mp3' });
+    before.createPreset('Quiet');
+    before.setSound({ enabled: false });
+
+    const after = createDiceController(env);
+    expect(after.getState().sound.enabled).toBe(false);
+    after.selectPreset(first);
+    expect(after.getState().sound).toEqual({ enabled: true, volume: 0.3, url: 'https://example.test/clack.mp3' });
   });
 
   it('keeps animation settings per Preset', () => {
@@ -460,6 +494,14 @@ describe('dice Share link', () => {
     const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
     expect(opened.getState().animationDuration).toBe(1500);
     expect(opened.getState().alwaysFullAnimation).toBe(true);
+  });
+
+  it('carries the sound settings in a Share link', () => {
+    const sharer = createDiceController(createTestEnv({ url: page }));
+    sharer.setSound({ enabled: false, volume: 0.4, url: 'https://example.test/clack.mp3' });
+
+    const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
+    expect(opened.getState().sound).toEqual({ enabled: false, volume: 0.4, url: 'https://example.test/clack.mp3' });
   });
 
   function sharedD20Link() {

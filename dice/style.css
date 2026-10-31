@@ -76,7 +76,8 @@ body {
 .dice__add,
 .dice__modifier,
 .dice__duration,
-.dice__full-animation {
+.dice__full-animation,
+.dice__sound {
   display: flex;
   align-items: center;
   gap: 0.5rem;
