@@ -39,6 +39,14 @@ export interface DiceOutcome {
 /** What the dice remember and share; one value per Preset. Add new fields with defaults here. */
 export interface DiceSettings {
   diceSet: DiceSet;
+  animation: AnimationSettings;
+}
+
+export interface AnimationSettings {
+  /** Length of a full roll animation in ms, MIN_ANIMATION_DURATION..MAX_ANIMATION_DURATION. */
+  duration: number;
+  /** Play the full animation even when the system asks for reduced motion. */
+  alwaysFull: boolean;
 }
 
 export interface DiceState {
@@ -52,9 +60,8 @@ export interface DiceState {
   history: DiceOutcome[];
   /** True from a roll until the view reports its animation finished; rolls are ignored meanwhile. */
   animating: boolean;
-  /** Length of a full roll animation in ms, MIN_ANIMATION_DURATION..MAX_ANIMATION_DURATION. */
+  /** The animation Settings in effect (see AnimationSettings). */
   animationDuration: number;
-  /** Play the full animation even when the system asks for reduced motion. */
   alwaysFullAnimation: boolean;
 }
 
@@ -103,9 +110,23 @@ export const REDUCED_MOTION_DURATION = 300;
 export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
   namespace: 'dice',
   version: 1,
-  defaults: { diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 } },
-  isValid: (settings): settings is DiceSettings => isDiceSet((settings as DiceSettings).diceSet),
+  // Fields added later need no version bump: missing ones are filled from these defaults.
+  defaults: {
+    diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
+    animation: { duration: 3000, alwaysFull: false },
+  },
+  isValid: (settings): settings is DiceSettings =>
+    isDiceSet((settings as DiceSettings).diceSet) && isAnimationSettings((settings as DiceSettings).animation),
 };
+
+function isValidDuration(duration: unknown): duration is number {
+  return typeof duration === 'number' && duration >= MIN_ANIMATION_DURATION && duration <= MAX_ANIMATION_DURATION;
+}
+
+function isAnimationSettings(value: unknown): value is AnimationSettings {
+  const { duration, alwaysFull } = (value ?? {}) as Partial<AnimationSettings>;
+  return isValidDuration(duration) && typeof alwaysFull === 'boolean';
+}
 
 function isDiceSet(value: unknown): value is DiceSet {
   const { groups, modifier } = (value ?? {}) as Partial<DiceSet>;
@@ -138,14 +159,18 @@ export function createDiceController(
     outcome: null,
     history: [],
     animating: false,
-    animationDuration: 3000,
-    alwaysFullAnimation: false,
   };
   const listeners = new Set<(state: DiceState) => void>();
 
   function fromSettings() {
     const { settings: current, presets, selectedPresetId } = settings.getSnapshot();
-    return { diceSet: current.diceSet, presets, selectedPresetId };
+    return {
+      diceSet: current.diceSet,
+      animationDuration: current.animation.duration,
+      alwaysFullAnimation: current.animation.alwaysFull,
+      presets,
+      selectedPresetId,
+    };
   }
 
   function update(next: Partial<DiceState>) {
@@ -159,8 +184,16 @@ export function createDiceController(
     update(fromSettings());
   }
 
+  function updateSettings(next: Partial<DiceSettings>) {
+    changeSettings(() => settings.update({ ...settings.getSnapshot().settings, ...next }));
+  }
+
   function setDiceSet(diceSet: DiceSet) {
-    changeSettings(() => settings.update({ ...settings.getSnapshot().settings, diceSet }));
+    updateSettings({ diceSet });
+  }
+
+  function setAnimation(next: Partial<AnimationSettings>) {
+    updateSettings({ animation: { ...settings.getSnapshot().settings.animation, ...next } });
   }
 
   function setGroups(groups: DiceGroup[]) {
@@ -213,10 +246,9 @@ export function createDiceController(
       if (!state.animating) update({ outcome: null, history: [] });
     },
     setAnimationDuration(ms) {
-      if (!(ms >= MIN_ANIMATION_DURATION && ms <= MAX_ANIMATION_DURATION)) return;
-      update({ animationDuration: ms });
+      if (isValidDuration(ms)) setAnimation({ duration: ms });
     },
-    setAlwaysFullAnimation: (always) => update({ alwaysFullAnimation: always }),
+    setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
     createPreset: (name) => changeSettings(() => settings.createPreset(name)),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),

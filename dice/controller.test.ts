@@ -295,6 +295,27 @@ describe('dice Settings persistence and Presets', () => {
     });
   });
 
+  it('remembers the animation length and the full-animation override after a reload', () => {
+    const env = createTestEnv();
+    const before = createDiceController(env);
+    before.setAnimationDuration(6500);
+    before.setAlwaysFullAnimation(true);
+
+    const after = createDiceController(env);
+    expect(after.getState().animationDuration).toBe(6500);
+    expect(after.getState().alwaysFullAnimation).toBe(true);
+  });
+
+  it('keeps animation settings per Preset', () => {
+    const dice = createDiceController(createTestEnv());
+    const first = dice.getState().selectedPresetId!;
+    dice.createPreset('Slow');
+    dice.setAnimationDuration(9000);
+
+    dice.selectPreset(first);
+    expect(dice.getState().animationDuration).toBe(3000);
+  });
+
   it.each(['{not json', '"text"', '{"version":1,"presets":[]}', '{"version":99,"presets":[{"id":"1","name":"","settings":{}}]}'])(
     'opens with the default 1d6 when stored Settings are unreadable: %s',
     (stored) => {
@@ -431,6 +452,16 @@ describe('dice Share link', () => {
     expect(opened.getState().diceSet).toEqual(sharer.getState().diceSet);
   });
 
+  it('carries the animation settings in a Share link', () => {
+    const sharer = createDiceController(createTestEnv({ url: page }));
+    sharer.setAnimationDuration(1500);
+    sharer.setAlwaysFullAnimation(true);
+
+    const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
+    expect(opened.getState().animationDuration).toBe(1500);
+    expect(opened.getState().alwaysFullAnimation).toBe(true);
+  });
+
   function sharedD20Link() {
     const sharer = createDiceController(createTestEnv({ url: page }));
     sharer.setCount(20, 1);
@@ -481,6 +512,11 @@ describe('dice Share link', () => {
         { sides: 20, count: 1 },
       ],
       modifier: 3,
+    });
+    // Links from before the animation settings existed open with the default animation.
+    expect(createDiceController(createTestEnv({ url: link })).getState()).toMatchObject({
+      animationDuration: 3000,
+      alwaysFullAnimation: false,
     });
   });
 
