@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createBrowserRandom } from '../shared/env';
 import { createTestEnv } from '../shared/test-env';
+import { settingsStorageKey } from '../shared/settings';
 import { DIE_SIDES, type DieSides, createDiceController, formatOutcome } from './controller';
 
 describe('dice controller', () => {
@@ -186,6 +187,146 @@ describe('dice controller', () => {
     expect(counts.every((count) => count > 0)).toBe(true);
     const chiSquare = counts.reduce((sum, count) => sum + (count - expected) ** 2 / expected, 0);
     expect(chiSquare).toBeLessThan(CRITICAL_VALUES[sides]);
+  });
+});
+
+describe('dice Settings persistence and Presets', () => {
+  it('keeps the dice set after a reload', () => {
+    const env = createTestEnv();
+    const before = createDiceController(env);
+    before.addDie(20);
+    before.setModifier(3);
+
+    const after = createDiceController(env);
+    expect(after.getState().diceSet).toEqual({
+      groups: [
+        { sides: 6, count: 1 },
+        { sides: 20, count: 1 },
+      ],
+      modifier: 3,
+    });
+  });
+
+  it.each(['{not json', '"text"', '{"version":1,"presets":[]}', '{"version":99,"presets":[{"id":"1","name":"","settings":{}}]}'])(
+    'opens with the default 1d6 when stored Settings are unreadable: %s',
+    (stored) => {
+      const env = createTestEnv();
+      env.storage.setItem(settingsStorageKey('dice'), stored);
+
+      const dice = createDiceController(env);
+      expect(dice.getState().diceSet).toEqual({ groups: [{ sides: 6, count: 1 }], modifier: 0 });
+      expect(dice.getState().presets).toHaveLength(1);
+    },
+  );
+
+  it('opens with defaults when a stored dice set is invalid', () => {
+    const env = createTestEnv();
+    env.storage.setItem(
+      settingsStorageKey('dice'),
+      JSON.stringify({
+        version: 1,
+        selectedPresetId: '1',
+        presets: [{ id: '1', name: 'Bad', settings: { diceSet: { groups: [{ sides: 7, count: 1 }], modifier: 0 } } }],
+      }),
+    );
+
+    expect(createDiceController(env).getState().diceSet).toEqual({ groups: [{ sides: 6, count: 1 }], modifier: 0 });
+  });
+
+  it('fills missing fields with defaults and ignores unknown fields in stored Settings', () => {
+    const env = createTestEnv();
+    env.storage.setItem(
+      settingsStorageKey('dice'),
+      JSON.stringify({
+        version: 1,
+        selectedPresetId: 'a',
+        presets: [
+          { id: 'a', name: 'Empty', settings: { futureField: true } },
+          { id: 'b', name: 'D20', settings: { diceSet: { groups: [{ sides: 20, count: 1 }], modifier: 2 } } },
+        ],
+      }),
+    );
+
+    const dice = createDiceController(env);
+    expect(dice.getState().diceSet).toEqual({ groups: [{ sides: 6, count: 1 }], modifier: 0 });
+    dice.selectPreset('b');
+    expect(dice.getState().diceSet).toEqual({ groups: [{ sides: 20, count: 1 }], modifier: 2 });
+  });
+
+  it('starts with one Preset that is selected', () => {
+    const { presets, selectedPresetId } = createDiceController(createTestEnv()).getState();
+    expect(presets).toHaveLength(1);
+    expect(selectedPresetId).toBe(presets[0]!.id);
+  });
+
+  it('creates a Preset from the current Settings and switches between Presets', () => {
+    const dice = createDiceController(createTestEnv());
+    const first = dice.getState().selectedPresetId!;
+    dice.createPreset('Attack');
+    const attack = dice.getState().selectedPresetId!;
+    dice.addDie(20);
+    dice.setModifier(5);
+
+    expect(dice.getState().presets.map((preset) => preset.name)).toEqual(['', 'Attack']);
+    expect(attack).not.toBe(first);
+
+    dice.selectPreset(first);
+    expect(dice.getState().diceSet).toEqual({ groups: [{ sides: 6, count: 1 }], modifier: 0 });
+    dice.selectPreset(attack);
+    expect(dice.getState().diceSet).toEqual({
+      groups: [
+        { sides: 6, count: 1 },
+        { sides: 20, count: 1 },
+      ],
+      modifier: 5,
+    });
+  });
+
+  it('renames and deletes Presets, keeping at least one', () => {
+    const dice = createDiceController(createTestEnv());
+    const first = dice.getState().selectedPresetId!;
+    dice.createPreset('Damage');
+    const damage = dice.getState().selectedPresetId!;
+
+    dice.renamePreset(first, 'Basic');
+    expect(dice.getState().presets).toEqual([
+      { id: first, name: 'Basic' },
+      { id: damage, name: 'Damage' },
+    ]);
+
+    dice.deletePreset(damage);
+    expect(dice.getState().presets).toEqual([{ id: first, name: 'Basic' }]);
+    expect(dice.getState().selectedPresetId).toBe(first);
+
+    dice.deletePreset(first);
+    expect(dice.getState().presets).toEqual([{ id: first, name: 'Basic' }]);
+  });
+
+  it('remembers Presets and the selected Preset after a reload', () => {
+    const env = createTestEnv();
+    const before = createDiceController(env);
+    before.createPreset('Big');
+    before.setCount(6, 4);
+    before.createPreset('Bigger');
+    before.setCount(6, 8);
+    before.selectPreset(before.getState().presets[1]!.id);
+
+    const after = createDiceController(env);
+    expect(after.getState().presets.map((preset) => preset.name)).toEqual(['', 'Big', 'Bigger']);
+    expect(after.getState().selectedPresetId).toBe(after.getState().presets[1]!.id);
+    expect(after.getState().diceSet.groups).toEqual([{ sides: 6, count: 4 }]);
+  });
+
+  it('notifies subscribers when switching Presets', () => {
+    const dice = createDiceController(createTestEnv());
+    const first = dice.getState().selectedPresetId!;
+    dice.createPreset('Two');
+    dice.setCount(6, 2);
+    const seen: number[] = [];
+    dice.subscribe((state) => seen.push(state.diceSet.groups[0]!.count));
+
+    dice.selectPreset(first);
+    expect(seen).toEqual([1]);
   });
 });
 

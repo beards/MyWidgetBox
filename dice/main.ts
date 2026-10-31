@@ -14,9 +14,18 @@ const addSides = $<HTMLSelectElement>('#add-sides');
 const addButton = $<HTMLButtonElement>('#add-die');
 const modifierInput = $<HTMLInputElement>('#modifier');
 const historyList = $<HTMLOListElement>('#history');
+const presetSelect = $<HTMLSelectElement>('#preset');
+const presetName = $<HTMLInputElement>('#preset-name');
+const presetNew = $<HTMLButtonElement>('#preset-new');
+const presetDelete = $<HTMLButtonElement>('#preset-delete');
 
 die.setAttribute('aria-label', strings.roll);
 rollButton.textContent = strings.roll;
+$('#presets-heading').textContent = strings.presets;
+presetSelect.setAttribute('aria-label', strings.presets);
+presetName.setAttribute('aria-label', strings.presetName);
+presetNew.textContent = strings.newPreset;
+presetDelete.textContent = strings.deletePreset;
 $('#dice-set-heading').textContent = strings.diceSet;
 addButton.textContent = strings.addDie;
 $('#modifier-label').textContent = strings.modifier;
@@ -25,7 +34,15 @@ addSides.replaceChildren(
   ...DIE_SIDES.map((sides) => new Option(strings.dieLabel(sides), String(sides), sides === 20, sides === 20)),
 );
 
-function render({ diceSet, outcome, history }: DiceState) {
+function render({ diceSet, presets, selectedPresetId, outcome, history }: DiceState) {
+  presetSelect.replaceChildren(
+    ...presets.map(({ id, name }) => new Option(name || strings.unnamedPreset, id, false, id === selectedPresetId)),
+  );
+  const selected = presets.find((preset) => preset.id === selectedPresetId);
+  presetName.value = selected?.name ?? '';
+  presetName.disabled = !selected;
+  presetDelete.disabled = !selected || presets.length === 1;
+
   die.textContent = outcome ? String(outcome.total) : '?';
   breakdown.textContent = outcome ? formatOutcome(outcome) : '';
   modifierInput.value = String(diceSet.modifier);
@@ -75,4 +92,14 @@ render(dice.getState());
 die.addEventListener('click', () => dice.roll());
 rollButton.addEventListener('click', () => dice.roll());
 addButton.addEventListener('click', () => dice.addDie(Number(addSides.value) as DieSides));
+presetSelect.addEventListener('change', () => dice.selectPreset(presetSelect.value));
+presetName.addEventListener('change', () => {
+  const id = dice.getState().selectedPresetId;
+  if (id) dice.renamePreset(id, presetName.value.trim());
+});
+presetNew.addEventListener('click', () => dice.createPreset(strings.newPresetName(dice.getState().presets.length + 1)));
+presetDelete.addEventListener('click', () => {
+  const id = dice.getState().selectedPresetId;
+  if (id) dice.deletePreset(id);
+});
 modifierInput.addEventListener('change', () => edit(() => dice.setModifier(Number(modifierInput.value))));

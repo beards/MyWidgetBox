@@ -1,5 +1,6 @@
 import type { Env } from '../shared/env';
 import { randomBelow } from '../shared/random';
+import { type PresetSummary, type SettingsSchema, type SettingsStoreOptions, createSettingsStore } from '../shared/settings';
 
 export const DIE_SIDES = [4, 6, 8, 10, 12, 20, 100] as const;
 export type DieSides = (typeof DIE_SIDES)[number];
@@ -28,8 +29,17 @@ export interface DiceOutcome {
   total: number;
 }
 
-export interface DiceState {
+/** What the dice remember and share; one value per Preset. Add new fields with defaults here. */
+export interface DiceSettings {
   diceSet: DiceSet;
+}
+
+export interface DiceState {
+  /** The dice set of the Settings in effect. */
+  diceSet: DiceSet;
+  presets: PresetSummary[];
+  /** null while Settings opened from a Share link are in effect and not saved. */
+  selectedPresetId: string | null;
   outcome: DiceOutcome | null;
   /** The most recent Outcomes, newest first, at most HISTORY_LIMIT; kept in memory only. */
   history: DiceOutcome[];
@@ -48,26 +58,70 @@ export interface DiceController {
   /** Sets the fixed integer added to every total; non-integers are ignored. */
   setModifier(modifier: number): void;
   roll(): void;
+  /** Saves the current Settings as a new Preset and switches to it. */
+  createPreset(name: string): void;
+  selectPreset(id: string): void;
+  renamePreset(id: string, name: string): void;
+  /** The last remaining Preset cannot be deleted. */
+  deletePreset(id: string): void;
 }
 
 export const MAX_DICE_PER_KIND = 99;
 export const HISTORY_LIMIT = 20;
 
-const DEFAULT_DICE_SET: DiceSet = { groups: [{ sides: 6, count: 1 }], modifier: 0 };
+export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
+  namespace: 'dice',
+  version: 1,
+  defaults: { diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 } },
+  isValid: (settings): settings is DiceSettings => isDiceSet((settings as DiceSettings).diceSet),
+};
+
+function isDiceSet(value: unknown): value is DiceSet {
+  const { groups, modifier } = (value ?? {}) as Partial<DiceSet>;
+  return (
+    Array.isArray(groups) &&
+    groups.length > 0 &&
+    new Set(groups.map((group) => group?.sides)).size === groups.length &&
+    groups.every(
+      (group) =>
+        DIE_SIDES.includes(group?.sides) &&
+        Number.isInteger(group.count) &&
+        group.count >= 1 &&
+        group.count <= MAX_DICE_PER_KIND,
+    ) &&
+    Number.isSafeInteger(modifier)
+  );
+}
 
 /** Headless dice logic: no DOM, all outside-world access goes through env. */
-export function createDiceController(env: Env): DiceController {
-  let state: DiceState = { diceSet: DEFAULT_DICE_SET, outcome: null, history: [] };
+export function createDiceController(env: Env, settingsOptions?: SettingsStoreOptions): DiceController {
+  const settings = createSettingsStore(env, diceSettingsSchema, settingsOptions);
+  let state: DiceState = { ...fromSettings(), outcome: null, history: [] };
   const listeners = new Set<(state: DiceState) => void>();
+
+  function fromSettings() {
+    const { settings: current, presets, selectedPresetId } = settings.getSnapshot();
+    return { diceSet: current.diceSet, presets, selectedPresetId };
+  }
 
   function update(next: Partial<DiceState>) {
     state = { ...state, ...next };
     listeners.forEach((listener) => listener(state));
   }
 
+  /** Runs a Settings action, then publishes the resulting Settings and Presets. */
+  function changeSettings(action: () => void) {
+    action();
+    update(fromSettings());
+  }
+
+  function setDiceSet(diceSet: DiceSet) {
+    changeSettings(() => settings.update({ ...settings.getSnapshot().settings, diceSet }));
+  }
+
   function setGroups(groups: DiceGroup[]) {
     if (groups.length === 0) return;
-    update({ diceSet: { ...state.diceSet, groups } });
+    setDiceSet({ ...state.diceSet, groups });
   }
 
   function setCount(sides: DieSides, count: number) {
@@ -96,7 +150,7 @@ export function createDiceController(env: Env): DiceController {
     setCount,
     setModifier(modifier) {
       if (!Number.isSafeInteger(modifier)) return;
-      update({ diceSet: { ...state.diceSet, modifier } });
+      setDiceSet({ ...state.diceSet, modifier });
     },
     roll() {
       const { groups, modifier } = state.diceSet;
@@ -107,6 +161,10 @@ export function createDiceController(env: Env): DiceController {
       const outcome = { rolls, modifier, total };
       update({ outcome, history: [outcome, ...state.history].slice(0, HISTORY_LIMIT) });
     },
+    createPreset: (name) => changeSettings(() => settings.createPreset(name)),
+    selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
+    renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
+    deletePreset: (id) => changeSettings(() => settings.deletePreset(id)),
   };
 }
 

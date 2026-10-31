@@ -58,11 +58,16 @@ body {
 }
 
 .dice__groups li,
+.dice__presets,
 .dice__add,
 .dice__modifier {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.dice__presets input {
+  width: 8rem;
 }
 
 .dice__groups input,
