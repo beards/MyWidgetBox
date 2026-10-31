@@ -38,6 +38,12 @@ export type WheelMessageKey =
   | 'importSettings'
   | 'importError'
   | 'labelColor'
+  | 'labelDirection'
+  | 'labelDirectionAcross'
+  | 'labelDirectionAlong'
+  | 'limitLabelSize'
+  | 'resultFontSize'
+  | 'maxLabelSize'
   | 'pointerColor'
   | 'removeAfterDraw'
   | 'drawn'
@@ -85,7 +91,13 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     exportSettings: 'Export',
     importSettings: 'Import',
     importError: 'This file could not be imported. Your Settings were not changed.',
-    labelColor: 'Entry text color',
+    labelColor: 'Wheel text color',
+    labelDirection: 'Entry text direction',
+    labelDirectionAcross: 'Across the sector',
+    labelDirectionAlong: 'Along the radius',
+    limitLabelSize: 'Limit entry text size',
+    resultFontSize: 'Result pop-up text size (px)',
+    maxLabelSize: 'Largest entry text size',
     pointerColor: 'Pointer color',
     removeAfterDraw: 'Remove entries after they are drawn',
     drawn: 'drawn',
@@ -132,7 +144,13 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     exportSettings: '匯出',
     importSettings: '匯入',
     importError: '無法匯入此檔案，現有 Settings 未變更。',
-    labelColor: '選項文字顏色',
+    labelColor: '轉盤文字顏色',
+    labelDirection: '選項文字方向',
+    labelDirectionAcross: '橫跨扇形',
+    labelDirectionAlong: '沿著半徑',
+    limitLabelSize: '限制選項文字大小',
+    resultFontSize: '結果彈窗文字大小（px）',
+    maxLabelSize: '選項文字大小上限',
     pointerColor: '指針顏色',
     removeAfterDraw: '抽中後移除',
     drawn: '已抽',

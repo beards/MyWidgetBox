@@ -54,11 +54,17 @@ export function applyAppearance(
 export interface AppearanceColorField<A> {
   key: { [K in keyof A]: A[K] extends string ? K : never }[keyof A] & string;
   label: () => string;
+  /** Adds one-click white and black buttons beside the color picker. */
+  quickColors?: boolean;
 }
 
 export interface AppearancePanelOptions<A extends Appearance> {
   i18n: I18n<AppearanceMessageKey>;
   fields?: AppearanceColorField<A>[];
+  /** What the font size is called on this Widget, when the shared name does not say what it sizes. */
+  fontSizeLabel?: () => string;
+  /** False for a Widget whose display has no text the shared text color would color. */
+  textColor?: boolean;
   /** Called with the whole next appearance on every edit (live preview); the caller validates. */
   onChange(appearance: A): void;
 }
@@ -66,6 +72,8 @@ export interface AppearancePanelOptions<A extends Appearance> {
 export interface AppearancePanel<A> {
   /** Shows these values; the input being typed into is left alone so typing is not disturbed. */
   update(appearance: A): void;
+  /** The font size row, for a Widget that wants it elsewhere in the panel (appending it moves it). */
+  fontSizeRow: HTMLElement;
 }
 
 /** Suggestions for the font input; any installed font family can be typed. */
@@ -87,7 +95,7 @@ const BACKGROUND_LABELS: Record<BackgroundKind, AppearanceMessageKey> = {
 /** Builds the appearance form inside container. Text follows the i18n locale. */
 export function mountAppearancePanel<A extends Appearance>(
   container: HTMLElement,
-  { i18n, fields = [], onChange }: AppearancePanelOptions<A>,
+  { i18n, fields = [], fontSizeLabel, textColor: showTextColor = true, onChange }: AppearancePanelOptions<A>,
 ): AppearancePanel<A> {
   const { t } = i18n;
   let current: A | null = null;
@@ -96,11 +104,11 @@ export function mountAppearancePanel<A extends Appearance>(
   const syncs: (() => void)[] = [];
   const relabels: (() => void)[] = [];
 
-  function row(label: () => string, input: HTMLElement, extra?: HTMLElement) {
+  function row(label: () => string, input: HTMLElement, ...extra: HTMLElement[]) {
     const wrapper = document.createElement('label');
     const text = document.createElement('span');
     relabels.push(() => (text.textContent = label()));
-    wrapper.append(text, input, ...(extra ? [extra] : []));
+    wrapper.append(text, input, ...extra);
     container.append(wrapper);
     return wrapper;
   }
@@ -189,7 +197,7 @@ export function mountAppearancePanel<A extends Appearance>(
   );
 
   const fontSize = input('number', { min: String(FONT_SIZE_RANGE.min), max: String(FONT_SIZE_RANGE.max), step: '1' });
-  row(() => t('fontSize'), fontSize);
+  const fontSizeRow = row(fontSizeLabel ?? (() => t('fontSize')), fontSize);
   bind(
     fontSize,
     (element, appearance) => ({ ...appearance, fontSize: element.valueAsNumber }),
@@ -197,7 +205,7 @@ export function mountAppearancePanel<A extends Appearance>(
   );
 
   const textColor = input('color');
-  row(() => t('textColor'), textColor);
+  row(() => t('textColor'), textColor).hidden = !showTextColor;
   bind(
     textColor,
     (element, appearance) => ({ ...appearance, textColor: element.value }),
@@ -216,7 +224,23 @@ export function mountAppearancePanel<A extends Appearance>(
 
   for (const field of fields) {
     const element = input('color');
-    row(field.label, element);
+    const quick = field.quickColors
+      ? (['#ffffff', '#000000'] as const).map((value) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'appearance__quick-color';
+          button.style.backgroundColor = value;
+          relabels.push(() => {
+            button.title = t(value === '#ffffff' ? 'colorWhite' : 'colorBlack');
+            button.setAttribute('aria-label', button.title);
+          });
+          button.addEventListener('click', () => {
+            if (current) onChange({ ...current, [field.key]: value });
+          });
+          return button;
+        })
+      : [];
+    row(field.label, element, ...quick);
     bind(
       element,
       (target, appearance) => ({ ...appearance, [field.key]: target.value }),
@@ -233,5 +257,6 @@ export function mountAppearancePanel<A extends Appearance>(
       current = appearance;
       syncs.forEach((sync) => sync());
     },
+    fontSizeRow,
   };
 }

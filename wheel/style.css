@@ -50,7 +50,7 @@ body {
   border: 4px solid #ffffff;
   border-radius: 0.5em;
   box-shadow: 0 0.4em 1.5em rgb(0 0 0 / 0.35);
-  color: #ffffff;
+  /* Text color: the wheel text color (applied inline). */
   font: inherit;
   font-size: 2.4em;
   font-weight: 700;
@@ -191,6 +191,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.wheel__appearance .appearance__quick-color {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid #888888;
+  border-radius: 0.25rem;
+  cursor: pointer;
 }
 
 .wheel__appearance [hidden] {

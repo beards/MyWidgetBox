@@ -3,6 +3,8 @@ import type { Env } from '../shared/env';
 import { settingsStorageKey } from '../shared/settings';
 import { createTestEnv } from '../shared/test-env';
 import {
+  LABEL_SIZE_LIMIT_MAX,
+  LABEL_SIZE_LIMIT_MIN,
   MAX_ENTRIES,
   REDUCED_MOTION_DURATION,
   WHEEL_STATE_KEY,
@@ -214,6 +216,9 @@ describe('wheel Settings, Presets and Share link', () => {
     scale: 1.25,
     labelColor: '#000000',
     pointerColor: '#ff0000',
+    labelDirection: 'along',
+    limitLabelSize: true,
+    maxLabelSize: 20,
   };
 
   function customized(env: Env) {
@@ -238,6 +243,34 @@ describe('wheel Settings, Presets and Share link', () => {
     const before = customized(env);
     expect(settingsOf(createWheelController(env).getState())).toEqual(settingsOf(before.getState()));
     expect(createWheelController(env).getState().appearance).toEqual(custom);
+  });
+
+  it('lays entry text across, limited to size 20, by default, and keeps the limit within its range', () => {
+    const wheel = createWheelController(createTestEnv());
+    const { appearance } = wheel.getState();
+    expect(appearance).toMatchObject({ labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20 });
+    wheel.setAppearance({ ...appearance, labelDirection: 'sideways' as never });
+    expect(wheel.getState().appearance).toEqual(appearance);
+    for (const maxLabelSize of [LABEL_SIZE_LIMIT_MIN - 1, LABEL_SIZE_LIMIT_MAX + 1, Number.NaN]) {
+      wheel.setAppearance({ ...appearance, maxLabelSize });
+      expect(wheel.getState().appearance).toEqual(appearance);
+    }
+    wheel.setAppearance({ ...appearance, limitLabelSize: true, maxLabelSize: LABEL_SIZE_LIMIT_MIN });
+    expect(wheel.getState().appearance).toMatchObject({ limitLabelSize: true, maxLabelSize: LABEL_SIZE_LIMIT_MIN });
+  });
+
+  it('keeps Settings saved before the entry text options existed, with their defaults', () => {
+    const env = createTestEnv();
+    const wheel = createWheelController(env);
+    const file = JSON.parse(wheel.exportSettings());
+    for (const preset of file.presets) {
+      delete preset.settings.appearance.labelDirection;
+      delete preset.settings.appearance.limitLabelSize;
+      delete preset.settings.appearance.maxLabelSize;
+      preset.settings.appearance.labelColor = '#123456';
+    }
+    expect(wheel.importSettings(JSON.stringify(file))).toBe(true);
+    expect(wheel.getState().appearance).toMatchObject({ labelColor: '#123456', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20 });
   });
 
   it('keeps entries per Preset', () => {

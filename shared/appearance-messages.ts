@@ -13,7 +13,9 @@ export type AppearanceMessageKey =
   | 'fontFamilyDefault'
   | 'fontSize'
   | 'textColor'
-  | 'scale';
+  | 'scale'
+  | 'colorWhite'
+  | 'colorBlack';
 
 export const appearanceMessages: MessageTables<AppearanceMessageKey> = {
   en: {
@@ -29,6 +31,8 @@ export const appearanceMessages: MessageTables<AppearanceMessageKey> = {
     fontSize: 'Text size (px)',
     textColor: 'Text color',
     scale: 'Scale',
+    colorWhite: 'White',
+    colorBlack: 'Black',
   },
   'zh-Hant': {
     appearance: '外觀',
@@ -43,5 +47,7 @@ export const appearanceMessages: MessageTables<AppearanceMessageKey> = {
     fontSize: '字級（px）',
     textColor: '文字顏色',
     scale: '縮放',
+    colorWhite: '白色',
+    colorBlack: '黑色',
   },
 };

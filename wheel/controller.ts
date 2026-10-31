@@ -59,6 +59,12 @@ export interface WheelAppearance extends Appearance {
   labelColor: string;
   /** `#rrggbb` color of the pointer. */
   pointerColor: string;
+  /** Whether entry text stops growing at maxLabelSize; otherwise it grows as far as its sector allows. */
+  limitLabelSize: boolean;
+  /** How entry text runs: `across` its sector (lines stacked from the rim inwards) or `along` it (reading outwards from the hub). */
+  labelDirection: LabelDirection;
+  /** Largest entry text size (wheel units, the wheel radius being 100), LABEL_SIZE_LIMIT_MIN..LABEL_SIZE_LIMIT_MAX. */
+  maxLabelSize: number;
 }
 
 /** What the wheel remembers and shares; one value per Preset. Add new fields with defaults here. */
@@ -159,6 +165,10 @@ export const MAX_ENTRIES = 100;
 export const MAX_LABEL_LENGTH = 100;
 export const MAX_WEIGHT = 1_000_000;
 export const HISTORY_LIMIT = 20;
+export const LABEL_DIRECTIONS = ['across', 'along'] as const;
+export type LabelDirection = (typeof LABEL_DIRECTIONS)[number];
+export const LABEL_SIZE_LIMIT_MIN = 4;
+export const LABEL_SIZE_LIMIT_MAX = 40;
 /** The pointer lands in this inner fraction of the winning sector, never right on a border. */
 const LANDING_FRACTION = 0.8;
 
@@ -178,7 +188,7 @@ export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
   // Fields added later need no version bump: missing ones are filled from these defaults.
   defaults: {
     entries: defaultEntries,
-    appearance: { ...appearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222' },
+    appearance: { ...appearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20 },
     animation: { duration: 5000, alwaysFull: false },
     removeAfterDraw: false,
     sound: soundDefaults,
@@ -218,8 +228,17 @@ function isEntryList(value: unknown): value is WheelEntry[] {
 }
 
 function isWheelAppearance(value: unknown): value is WheelAppearance {
-  const { labelColor, pointerColor } = (value ?? {}) as Partial<WheelAppearance>;
-  return isAppearance(value) && isHexColor(labelColor) && isHexColor(pointerColor);
+  const { labelColor, pointerColor, labelDirection, limitLabelSize, maxLabelSize } = (value ?? {}) as Partial<WheelAppearance>;
+  return (
+    isAppearance(value) &&
+    isHexColor(labelColor) &&
+    isHexColor(pointerColor) &&
+    LABEL_DIRECTIONS.includes(labelDirection as LabelDirection) &&
+    typeof limitLabelSize === 'boolean' &&
+    typeof maxLabelSize === 'number' &&
+    maxLabelSize >= LABEL_SIZE_LIMIT_MIN &&
+    maxLabelSize <= LABEL_SIZE_LIMIT_MAX
+  );
 }
 
 /** The sectors of the unrotated wheel, in entry order, each spanning weight / total of 360°. */

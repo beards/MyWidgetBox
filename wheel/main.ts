@@ -8,9 +8,13 @@ import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
 import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
 import {
+  LABEL_DIRECTIONS,
+  LABEL_SIZE_LIMIT_MAX,
+  LABEL_SIZE_LIMIT_MIN,
   MAX_ENTRIES,
   MAX_LABEL_LENGTH,
   MAX_WEIGHT,
+  type LabelDirection,
   type WheelAppearance,
   type WheelEntry,
   type WheelOutcome,
@@ -62,14 +66,21 @@ let resultTimer = 0;
 const appearancePanel = mountAppearancePanel<WheelAppearance>($('#appearance'), {
   i18n,
   fields: [
-    { key: 'labelColor', label: () => t('labelColor') },
+    { key: 'labelColor', label: () => t('labelColor'), quickColors: true },
     { key: 'pointerColor', label: () => t('pointerColor') },
   ],
+  // On the wheel, the shared font size only sizes the result pop-up (entry text is sized to fit its sector).
+  fontSizeLabel: () => t('resultFontSize'),
+  // Every text on the wheel follows the wheel's own text color instead.
+  textColor: false,
   onChange(appearance) {
     wheel.setAppearance(appearance);
     appearancePanel.update(wheel.getState().appearance);
   },
 });
+const labelOptions = mountLabelOptions($('#appearance'));
+// After the entry text options, so the two kinds of text size are not mistaken for each other.
+$('#appearance').append(appearancePanel.fontSizeRow);
 const presetPanel = mountPresetPanel(wheel, i18n);
 const sharePanel = mountSharePanel(i18n, (options) => wheel.shareLink(options));
 const settingsFilePanel = mountSettingsFilePanel(i18n, {
@@ -82,6 +93,7 @@ const soundInputs = mountSoundInputs(wheel, sound, 'tick');
 function showResult(outcome: WheelOutcome) {
   result.textContent = outcome.label;
   result.style.backgroundColor = outcome.color;
+  result.style.color = wheel.getState().appearance.labelColor;
   result.hidden = false;
   // Restart the pop-in animation.
   result.classList.remove('wheel__result--in');
@@ -100,7 +112,9 @@ function render(state: WheelState) {
   const { entries, appearance, outcome, history, animating, remainingEntries, allDrawn } = state;
   applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
   scene.setColors({ label: appearance.labelColor, pointer: appearance.pointerColor });
+  result.style.color = appearance.labelColor;
   appearancePanel.update(appearance);
+  labelOptions.update(appearance);
 
   // Drawn entries are hidden from the wheel (it shows only what can still be drawn) and marked in the editor.
   const drawnIds = state.removeAfterDraw ? state.drawnEntryIds : [];
@@ -108,6 +122,11 @@ function render(state: WheelState) {
     renderedWheel = remainingEntries;
     scene.setEntries(remainingEntries);
   }
+  // After the entries, so a new wheel is laid out once with the right layout (an unchanged layout does nothing).
+  scene.setLabelLayout({
+    direction: appearance.labelDirection,
+    sizeLimit: appearance.limitLabelSize ? appearance.maxLabelSize : null,
+  });
   if (entries !== renderedEntries || drawnIds.join() !== renderedDrawn?.join()) {
     renderedEntries = entries;
     renderedDrawn = drawnIds;
@@ -236,3 +255,63 @@ addEntryButton.addEventListener('click', () =>
 durationInput.addEventListener('input', () => wheel.setAnimationDuration(Number(durationInput.value) * 1000));
 alwaysFullInput.addEventListener('change', () => wheel.setAlwaysFullAnimation(alwaysFullInput.checked));
 removeAfterDrawInput.addEventListener('change', () => wheel.setRemoveAfterDraw(removeAfterDrawInput.checked));
+
+/**
+ * The entry text options, added to the appearance panel: the direction of its lines, and its size
+ * limit (a checkbox, unchecked: text grows as far as its sector allows; and a slider for the
+ * largest size, with its value shown beside it).
+ */
+function mountLabelOptions(container: HTMLElement) {
+  const change = (changes: Partial<WheelAppearance>) => wheel.setAppearance({ ...wheel.getState().appearance, ...changes });
+
+  const directionLabel = document.createElement('label');
+  const directionText = document.createElement('span');
+  const direction = document.createElement('select');
+  const directionOptions = LABEL_DIRECTIONS.map((value) => {
+    const option = document.createElement('option');
+    option.value = value;
+    return option;
+  });
+  direction.append(...directionOptions);
+  direction.addEventListener('change', () => change({ labelDirection: direction.value as LabelDirection }));
+  directionLabel.append(directionText, direction);
+
+  const toggleLabel = document.createElement('label');
+  const toggle = document.createElement('input');
+  toggle.type = 'checkbox';
+  const toggleText = document.createElement('span');
+  toggle.addEventListener('change', () => change({ limitLabelSize: toggle.checked }));
+  toggleLabel.append(toggle, toggleText);
+
+  const sliderLabel = document.createElement('label');
+  const sliderText = document.createElement('span');
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = String(LABEL_SIZE_LIMIT_MIN);
+  slider.max = String(LABEL_SIZE_LIMIT_MAX);
+  slider.step = '1';
+  const value = document.createElement('output');
+  slider.addEventListener('input', () => change({ maxLabelSize: Number(slider.value) }));
+  sliderLabel.append(sliderText, slider, value);
+
+  const relabel = () => {
+    directionText.textContent = t('labelDirection');
+    directionOptions[0]!.textContent = t('labelDirectionAcross');
+    directionOptions[1]!.textContent = t('labelDirectionAlong');
+    toggleText.textContent = t('limitLabelSize');
+    sliderText.textContent = t('maxLabelSize');
+  };
+  relabel();
+  i18n.subscribe(relabel);
+  container.append(directionLabel, toggleLabel, sliderLabel);
+
+  return {
+    update({ labelDirection, limitLabelSize, maxLabelSize }: WheelAppearance) {
+      direction.value = labelDirection;
+      toggle.checked = limitLabelSize;
+      if (document.activeElement !== slider) slider.value = String(maxLabelSize);
+      value.textContent = String(maxLabelSize);
+      sliderLabel.hidden = !limitLabelSize;
+    },
+  };
+}

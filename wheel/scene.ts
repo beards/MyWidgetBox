@@ -1,11 +1,16 @@
 // SVG view of the wheel: crisp at any zoom (OBS scaling) and cheap to redraw. No controller import.
 import { type WheelEntry, sectorsFor } from './controller';
-import { easeOut, landingRotation, sectorUnderPointer } from './geometry';
+import { easeOut, fitLabel, type LabelDirection, landingRotation, MAX_LABEL_SIZE, sectorUnderPointer } from './geometry';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RADIUS = 100;
-/** Longer labels are cut with an ellipsis so they stay inside their sector. */
-const MAX_LABEL_CHARS = 18;
+/** Labels sit between the hub and the rim, centred a bit past half way when they are short. */
+const LABEL_BAND = { inner: 14, outer: RADIUS - 6, center: RADIUS * 0.58 };
+
+export interface LabelLayout {
+  direction: LabelDirection;
+  sizeLimit: number | null;
+}
 
 export interface WheelColors {
   label: string;
@@ -15,6 +20,11 @@ export interface WheelColors {
 export interface WheelScene {
   /** Redraws the sectors (keeps the current rotation); no entries draws an empty grey disc. */
   setEntries(entries: WheelEntry[]): void;
+  /**
+   * How labels are laid out: the direction their lines run, and the largest size (wheel units),
+   * or null for labels as big as their sectors allow.
+   */
+  setLabelLayout(layout: LabelLayout): void;
   setColors(colors: WheelColors): void;
   /**
    * Spins forward so that wheel angle `angle` (see WheelOutcome.angle) stops under the
@@ -47,16 +57,34 @@ function sectorPath(start: number, end: number): string {
   return `M 0 0 L ${x1} ${y1} A ${RADIUS} ${RADIUS} 0 ${largeArc} 1 ${x2} ${y2} Z`;
 }
 
-function shorten(label: string): string {
-  const chars = Array.from(label);
-  return chars.length > MAX_LABEL_CHARS ? `${chars.slice(0, MAX_LABEL_CHARS - 1).join('')}…` : label;
+/**
+ * Width of a text at a font size, measured on a hidden SVG text inside `group` so it uses the
+ * labels' real font and weight. Falls back to an estimate while the wheel is not rendered.
+ */
+function textMeasurer(group: SVGGElement): (text: string, size: number) => number {
+  const probe = svg('text', { visibility: 'hidden' });
+  group.append(probe);
+  // The fit tries many sizes and line breaks; the same text at the same size is measured once.
+  const widths = new Map<string, number>();
+  return (text, size) => {
+    const key = `${size}\u0000${text}`;
+    let width = widths.get(key);
+    if (width === undefined) {
+      probe.textContent = text;
+      probe.setAttribute('font-size', String(size));
+      width = probe.getComputedTextLength();
+      if (width === 0 && text !== '') width = Array.from(text).length * 0.6 * size;
+      widths.set(key, width);
+    }
+    return width;
+  };
 }
 
 export function createWheelScene(container: HTMLElement): WheelScene {
   const root = svg('svg', { viewBox: '-110 -116 220 228', role: 'img', 'aria-hidden': 'true' });
   const rotor = svg('g');
   const sectors = svg('g');
-  const labels = svg('g', { 'font-size': 11, 'dominant-baseline': 'central', 'text-anchor': 'middle' });
+  const labels = svg('g', { 'font-size': MAX_LABEL_SIZE, 'dominant-baseline': 'central', 'text-anchor': 'middle' });
   rotor.append(sectors, labels, svg('circle', { r: RADIUS, fill: 'none', stroke: 'rgb(0 0 0 / 0.25)', 'stroke-width': 1 }));
   const hub = svg('circle', { r: 9, fill: '#ffffff', stroke: 'rgb(0 0 0 / 0.25)', 'stroke-width': 1 });
   // Pointer at the top, tip pointing into the wheel.
@@ -67,6 +95,33 @@ export function createWheelScene(container: HTMLElement): WheelScene {
   let rotation = 0;
   let frame = 0;
   let parts: ReturnType<typeof sectorsFor> = [];
+  let layout: LabelLayout = { direction: 'across', sizeLimit: null };
+
+  function drawLabels() {
+    labels.replaceChildren();
+    const measure = textMeasurer(labels);
+    labels.replaceChildren(
+      ...parts.map(({ entry, start, end }) => {
+        const span = end - start;
+        const mid = parts.length === 1 ? 0 : start + span / 2;
+        // Wrapped, shrunk (then cut) to stay inside its sector, reading outwards or upright at the rim.
+        const fit = fitLabel(entry.label, span, measure, LABEL_BAND, {
+          direction: layout.direction,
+          maxSize: layout.sizeLimit ?? undefined,
+        });
+        const turn = fit.direction === 'along' ? mid - 90 : mid;
+        const group = svg('g', { transform: `rotate(${turn})`, 'font-size': fit.size });
+        group.append(
+          ...fit.lines.map((line) => {
+            const text = svg('text', { x: line.x, y: line.y });
+            text.textContent = line.text;
+            return text;
+          }),
+        );
+        return group;
+      }),
+    );
+  }
   const applyRotation = () => rotor.setAttribute('transform', `rotate(${rotation % 360})`);
 
   return {
@@ -84,20 +139,12 @@ export function createWheelScene(container: HTMLElement): WheelScene {
             : svg('path', { d: sectorPath(start, end), fill: entry.color, stroke: 'rgb(255 255 255 / 0.6)', 'stroke-width': 0.5 }),
         ),
       );
-      labels.replaceChildren(
-        ...parts.map(({ entry, start, end }) => {
-          const span = end - start;
-          const mid = entries.length === 1 ? 0 : start + span / 2;
-          // Radial text reading outwards from the hub; smaller in thin sectors.
-          const size = Math.max(4, Math.min(11, span * 0.35));
-          const text = svg('text', {
-            transform: `rotate(${mid - 90}) translate(${RADIUS * 0.58} 0)`,
-            'font-size': size,
-          });
-          text.textContent = shorten(entry.label);
-          return text;
-        }),
-      );
+      drawLabels();
+    },
+    setLabelLayout(next) {
+      if (next.direction === layout.direction && next.sizeLimit === layout.sizeLimit) return;
+      layout = next;
+      drawLabels();
     },
     setColors({ label, pointer: pointerColor }) {
       labels.setAttribute('fill', label);

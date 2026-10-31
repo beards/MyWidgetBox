@@ -26,3 +26,191 @@ export function sectorUnderPointer(sectors: { start: number; end: number }[], ro
   const index = sectors.findIndex((sector) => angle < sector.end);
   return index === -1 ? sectors.length - 1 : index;
 }
+
+/** Labels never get bigger than this (in wheel units, the wheel radius being 100), even with no size limit… */
+export const MAX_LABEL_SIZE = 80;
+/** …nor smaller: what still does not fit at this size is cut with an ellipsis. */
+export const MIN_LABEL_SIZE = 3;
+
+/** Distance between the lines of a wrapped label, in font sizes. */
+const LINE_HEIGHT = 1.15;
+const MAX_LABEL_LINES = 8;
+/** Places tried for a block of across lines, from the rim inwards. */
+const ACROSS_PLACES = 7;
+/** One break opportunity each: a run of spaces, a CJK character, or a word. */
+const TOKENS = /\s+|[⺀-鿿가-힯豈-﫿＀-￯]|[^\s⺀-鿿가-힯豈-﫿＀-￯]+/gu;
+
+/**
+ * How a label's lines run: `along` the sector's middle (reading outwards from the hub, lines side
+ * by side), or `across` it (upright when the sector is at the top, lines stacked from the rim
+ * inwards, longer towards the rim where the sector is wider).
+ */
+export type LabelDirection = 'across' | 'along';
+
+export interface LabelLine {
+  text: string;
+  /**
+   * Centre of the line in the label's own frame. `along`: x is the distance from the hub, y the
+   * sideways offset from the sector's middle (negative: the top line). `across`: x is the sideways
+   * offset (always 0), y is minus the distance from the hub.
+   */
+  x: number;
+  y: number;
+}
+
+export interface LabelFit {
+  direction: LabelDirection;
+  /** Font size in wheel units. */
+  size: number;
+  lines: LabelLine[];
+}
+
+interface Slot {
+  /** Room for the line's text. */
+  room: number;
+  /** Where the line goes, given its width. */
+  place(width: number): LabelLine;
+}
+
+/**
+ * Fits a label inside a sector of `span` degrees, between `band.inner` and `band.outer` from the
+ * hub, running in the given direction, as big as possible up to `maxSize`, on one to
+ * MAX_LABEL_LINES lines (fewer lines when the size is the same). Along lines are centred on
+ * `band.center` when they fit there. It shrinks before it is cut. `measure` gives a text's width
+ * at a font size (not always proportional to the size: some fonts draw small text relatively wider).
+ */
+export function fitLabel(
+  label: string,
+  span: number,
+  measure: (text: string, size: number) => number,
+  band: { inner: number; outer: number; center: number },
+  { direction, maxSize = MAX_LABEL_SIZE }: { direction: LabelDirection; maxSize?: number },
+): LabelFit {
+  const largest = Math.max(MIN_LABEL_SIZE, Math.min(MAX_LABEL_SIZE, maxSize));
+  const tokens = label.match(TOKENS) ?? [];
+  const tan = span >= 180 ? Infinity : Math.tan((span * Math.PI) / 360);
+  const unbreakable = (word: string) => measure(word, MIN_LABEL_SIZE) > band.outer - band.inner;
+
+  /** Along lines side by side, centred on the sector's middle. */
+  const alongSlots = (size: number, n: number): Slot[] =>
+    Array.from({ length: n }, (_, k) => {
+      const y = (k - (n - 1) / 2) * size * LINE_HEIGHT;
+      const top = Math.abs(y) + size / 2;
+      const lo = Math.max(band.inner, top / tan);
+      const hi = top < band.outer ? Math.sqrt(band.outer ** 2 - top ** 2) : -Infinity;
+      return { room: hi - lo, place: (width) => ({ x: Math.max(lo + width / 2, Math.min(band.center, hi - width / 2)), y, text: '' }) };
+    });
+
+  /** Across lines stacked inwards from `first` (distance of the first line's centre from the hub). */
+  const acrossSlots = (size: number, n: number, first: number): Slot[] =>
+    Array.from({ length: n }, (_, k) => {
+      const distance = first - k * size * LINE_HEIGHT;
+      const near = distance - size / 2;
+      const far = distance + size / 2;
+      const half = near < band.inner || far >= band.outer ? -Infinity : Math.min(Math.sqrt(band.outer ** 2 - far ** 2), near * tan);
+      return { room: 2 * half, place: () => ({ x: 0, y: -distance, text: '' }) };
+    });
+
+  /** Every way to lay out n lines at a size in a direction (across: several places along the radius). */
+  const layouts = (direction: LabelDirection, size: number, n: number): Slot[][] => {
+    if (direction === 'along') return [alongSlots(size, n)];
+    const highest = band.outer - size / 2;
+    const lowest = band.inner + size / 2 + (n - 1) * size * LINE_HEIGHT;
+    if (lowest > highest) return [];
+    return Array.from({ length: ACROSS_PLACES }, (_, i) => acrossSlots(size, n, highest - ((highest - lowest) * i) / (ACROSS_PLACES - 1)));
+  };
+
+  /**
+   * Fills the slots greedily; null when the label does not fit (unless `cut`, which ends it with an
+   * ellipsis), or the number of lines it needs when that is fewer than the slots.
+   */
+  function fill(direction: LabelDirection, size: number, slots: Slot[], cut: true): LabelFit;
+  function fill(direction: LabelDirection, size: number, slots: Slot[], cut: false): LabelFit | number | null;
+  function fill(direction: LabelDirection, size: number, slots: Slot[], cut: boolean): LabelFit | number | null {
+    const fits = (text: string, room: number) => measure(text, size) <= room;
+    const queue = [...tokens];
+    const texts: string[] = [];
+    for (const { room } of slots) {
+      let text = '';
+      while (queue.length > 0) {
+        const token = queue[0]!;
+        if (text === '' && /^\s+$/.test(token)) {
+          queue.shift();
+          continue;
+        }
+        if (fits((text + token).trimEnd(), room)) {
+          text += token;
+          queue.shift();
+          continue;
+        }
+        // Words stay whole (the label shrinks instead), unless one is too long for a line even at the smallest size.
+        const chars = Array.from(token);
+        if (text === '' && chars.length > 1 && (cut || unbreakable(token))) queue.splice(0, 1, ...chars);
+        else break;
+      }
+      texts.push(text.trimEnd());
+    }
+    const rest = queue.join('').trim();
+    const done = (lines: string[]): LabelFit => ({
+      direction,
+      size,
+      lines: lines.map((text, k) => ({ ...slots[k]!.place(measure(text, size)), text })),
+    });
+    const used = texts.findIndex((text) => text === '');
+    if (rest === '' && used === -1) return done(texts);
+    // It all went on the first lines, the others are left empty: fewer lines do.
+    if (rest === '' && !cut && used > 0 && texts.slice(used).every((text) => text === '')) return used;
+    if (!cut) return null;
+    const kept = texts.filter((text) => text !== '');
+    if (kept.length === 0) return { direction, size, lines: [] };
+    const room = slots[kept.length - 1]!.room;
+    const chars = Array.from(`${kept.at(-1)!}${rest === '' ? '' : ' '}${rest}`);
+    let text = `${chars.join('')}…`;
+    while (chars.length > 0 && !fits(text, room)) {
+      chars.pop();
+      text = `${chars.join('').trimEnd()}…`;
+    }
+    return done([...kept.slice(0, -1), text]);
+  }
+
+  /**
+   * The label on at most n lines at a size, if it fits: across, the middle of the places where it
+   * fits on n lines.
+   */
+  const tryFit = (direction: LabelDirection, size: number, n: number): LabelFit | null => {
+    const results = layouts(direction, size, n)
+      .filter((slots) => slots.every(({ room }) => room > 0))
+      .map((slots) => fill(direction, size, slots, false));
+    const fitting = results.filter((result): result is LabelFit => typeof result === 'object' && result !== null);
+    if (fitting.length > 0) return fitting[Math.floor((fitting.length - 1) / 2)]!;
+    const fewer = results.find((result): result is number => typeof result === 'number');
+    return fewer === undefined ? null : tryFit(direction, size, fewer);
+  };
+
+  let best: LabelFit | null = null;
+  for (let n = 1; n <= MAX_LABEL_LINES; n++) {
+    if (best && best.size >= largest) break;
+    let fit = tryFit(direction, largest, n);
+    if (!fit) {
+      // Largest size that fits on n lines, by bisection.
+      let low = Math.max(MIN_LABEL_SIZE, best?.size ?? 0);
+      let high = largest;
+      fit = tryFit(direction, low, n);
+      if (!fit) continue;
+      for (let i = 0; i < 10; i++) {
+        const mid = (low + high) / 2;
+        const tried = tryFit(direction, mid, n);
+        if (tried) [low, fit] = [mid, tried];
+        else high = mid;
+      }
+    }
+    if (!best || fit.size > best.size + 1e-6) best = fit;
+  }
+  if (best) return best;
+  // Too long even at the smallest size: as many lines as fit, the last one cut.
+  for (let n = MAX_LABEL_LINES; n >= 1; n--) {
+    const slots = layouts(direction, MIN_LABEL_SIZE, n).find((places) => places.every(({ room }) => room > 0));
+    if (slots) return fill(direction, MIN_LABEL_SIZE, slots, true);
+  }
+  return { direction, size: MIN_LABEL_SIZE, lines: [] };
+}
