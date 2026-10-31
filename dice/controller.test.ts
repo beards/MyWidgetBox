@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBrowserRandom } from '../shared/env';
+import { type Env, createBrowserRandom } from '../shared/env';
 import { settingsStorageKey } from '../shared/settings';
 import { createShareLink } from '../shared/share-link';
 import { createTestEnv } from '../shared/test-env';
@@ -290,22 +290,16 @@ describe('dice controller', () => {
     100: 148.23,
   };
 
-  it.each(DIE_SIDES)('produces uniformly distributed d%i Outcomes with the production random source', (sides) => {
-    const dice = createDiceController(createBrowserEnvForNode());
-    dice.addDie(sides);
-    if (sides !== 6) dice.removeDie(6);
-    const expected = 2_000;
-    const rolls = expected * sides;
-    const counts = new Array<number>(sides).fill(0);
-    for (let i = 0; i < rolls; i++) {
-      rollAndFinish(dice);
-      const value = dice.getState().outcome!.rolls[0]!.value;
-      counts[value - 1]!++;
-    }
+  // A seeded pseudo-random stream makes these deterministic: they check the mapping from
+  // uint32 to faces (rejection sampling) is unbiased, and can never fail at random in CI.
+  it.each(DIE_SIDES)('produces uniformly distributed d%i Outcomes from a uniform random source', (sides) => {
+    const counts = rollCounts(sides, createTestEnv({ seed: sides }));
+    expect(chiSquare(counts)).toBeLessThan(CRITICAL_VALUES[sides]);
+  });
 
-    expect(counts.every((count) => count > 0)).toBe(true);
-    const chiSquare = counts.reduce((sum, count) => sum + (count - expected) ** 2 / expected, 0);
-    expect(chiSquare).toBeLessThan(CRITICAL_VALUES[sides]);
+  it('rolls fair d6 Outcomes with the production random source (smoke test)', () => {
+    // p = 1e-6 for 5 degrees of freedom: a fair source fails this about once in a million runs.
+    expect(chiSquare(rollCounts(6, createBrowserEnvForNode()))).toBeLessThan(35.888);
   });
 });
 
@@ -754,6 +748,25 @@ describe('dice Settings export / import', () => {
 /** Production random source (crypto.getRandomValues) with test doubles for browser-only parts. */
 function createBrowserEnvForNode() {
   return { ...createTestEnv(), randomUint32: createBrowserRandom() };
+}
+
+/** How often each face of one d`sides` came up in 2000 * sides rolls. */
+function rollCounts(sides: DieSides, env: Env): number[] {
+  const dice = createDiceController(env);
+  dice.addDie(sides);
+  if (sides !== 6) dice.removeDie(6);
+  const counts = new Array<number>(sides).fill(0);
+  for (let i = 0; i < 2_000 * sides; i++) {
+    rollAndFinish(dice);
+    counts[dice.getState().outcome!.rolls[0]!.value - 1]!++;
+  }
+  return counts;
+}
+
+/** Pearson's chi-square statistic of counts against a uniform expectation. */
+function chiSquare(counts: number[]): number {
+  const expected = counts.reduce((sum, count) => sum + count, 0) / counts.length;
+  return counts.reduce((sum, count) => sum + (count - expected) ** 2 / expected, 0);
 }
 
 /** One complete roll: decide the Outcome, then report the animation finished as the view would. */

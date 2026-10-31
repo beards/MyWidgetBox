@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Env, createBrowserRandom } from '../shared/env';
+import type { Env } from '../shared/env';
 import { settingsStorageKey } from '../shared/settings';
 import { createTestEnv } from '../shared/test-env';
 import {
@@ -178,9 +178,10 @@ describe('wheel controller', () => {
 });
 
 describe('wheel fairness', () => {
-  it('picks entries in proportion to their weights (chi-square, real random source)', () => {
+  it('picks entries in proportion to their weights (chi-square, seeded uniform random source)', () => {
     const weights = [1, 2, 3, 4];
-    const env = { ...createTestEnv(), randomUint32: createBrowserRandom() };
+    // Seeded so the test is deterministic and never fails at random in CI.
+    const env = createTestEnv({ seed: 1 });
     const wheel = wheelWith(
       env,
       weights.map((weight) => ({ label: String(weight), weight })),
