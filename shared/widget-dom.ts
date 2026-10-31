@@ -14,7 +14,8 @@ export type PanelMessageKey =
   | 'sharedPresetName'
   | 'copied'
   | 'copyFailed'
-  | 'importError';
+  | 'importError'
+  | 'restoreDefaultsConfirm';
 
 export interface PanelI18n {
   t(key: PanelMessageKey, params?: Record<string, string | number>): string;
@@ -113,11 +114,20 @@ export function mountSharePanel(i18n: PanelI18n, link: (options: ShareLinkOption
 /** How long a downloaded file's object URL is kept; revoking it right after click() can cancel the download. */
 const DOWNLOAD_URL_LIFETIME = 10_000;
 
-/** Settings backup: an export (download) button and an import file input with its error message. */
+/**
+ * Settings backup: an export (download) button and an import file input with its error message,
+ * plus the restore defaults button (asks first: it replaces the selected Preset's Settings).
+ */
 export function mountSettingsFilePanel(
   i18n: PanelI18n,
-  { fileName, exportSettings, importSettings }: { fileName: string; exportSettings(): string; importSettings(text: string): boolean },
+  {
+    fileName,
+    exportSettings,
+    importSettings,
+    restoreDefaults,
+  }: { fileName: string; exportSettings(): string; importSettings(text: string): boolean; restoreDefaults(): void },
 ) {
+  const restoreButton = $<HTMLButtonElement>('#settings-restore');
   const exportButton = $<HTMLButtonElement>('#settings-export');
   const importInput = $<HTMLInputElement>('#settings-import');
   const importError = $('#settings-import-error');
@@ -130,6 +140,9 @@ export function mountSettingsFilePanel(
     const href = link.href;
     setTimeout(() => URL.revokeObjectURL(href), DOWNLOAD_URL_LIFETIME);
   });
+  restoreButton.addEventListener('click', () => {
+    if (confirm(i18n.t('restoreDefaultsConfirm'))) restoreDefaults();
+  });
   importInput.addEventListener('change', async () => {
     const file = importInput.files?.[0];
     if (!file) return;
@@ -138,9 +151,9 @@ export function mountSettingsFilePanel(
   });
 
   return {
-    /** `locked` disables importing (e.g. while the wheel spins). */
+    /** `locked` disables importing and restoring defaults (e.g. while the wheel spins). */
     update({ locked = false } = {}) {
-      importInput.disabled = locked;
+      importInput.disabled = restoreButton.disabled = locked;
     },
   };
 }

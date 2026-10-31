@@ -51,7 +51,10 @@ export type TimerMessageKey =
   | 'copyFailed'
   | 'exportSettings'
   | 'importSettings'
-  | 'importError';
+  | 'importError'
+  | 'restoreDefaults'
+  | 'restoreDefaultsConfirm'
+  | 'home';
 
 export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
   en: {
@@ -106,6 +109,9 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
     exportSettings: 'Export',
     importSettings: 'Import',
     importError: 'This file could not be imported. Your Settings were not changed.',
+    restoreDefaults: 'Restore defaults',
+    restoreDefaultsConfirm: 'Replace the Settings of this Preset with the defaults?',
+    home: '← All widgets',
   },
   'zh-Hant': {
     ...appearanceMessages['zh-Hant'],
@@ -159,5 +165,8 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
     exportSettings: '匯出',
     importSettings: '匯入',
     importError: '無法匯入此檔案，現有 Settings 未變更。',
+    restoreDefaults: '回復預設值',
+    restoreDefaultsConfirm: '要把這個 Preset 的設定全部回復成預設值嗎？',
+    home: '← 所有工具',
   },
 };

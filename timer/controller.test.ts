@@ -267,6 +267,22 @@ describe('two tabs', () => {
 });
 
 describe('Settings', () => {
+  it('restores the default timers and Settings', () => {
+    const { env, timer, id } = setup();
+    const fresh = open(createTestEnv()).timer.getState();
+    timer.setDuration(id, 3 * MINUTE);
+    timer.addTimer();
+    timer.setShowFraction(true);
+
+    timer.restoreDefaults();
+    const { timers, showFraction } = timer.getState();
+    expect(timers.map(({ mode, duration, name }) => ({ mode, duration, name }))).toEqual(
+      fresh.timers.map(({ mode, duration, name }) => ({ mode, duration, name })),
+    );
+    expect(showFraction).toBe(fresh.showFraction);
+    expect(open(env).first().duration).toBe(fresh.timers[0]!.duration);
+  });
+
   it('remembers the mode and duration across reloads', () => {
     const { env, timer, id } = setup();
     timer.setDuration(id, 3 * MINUTE);

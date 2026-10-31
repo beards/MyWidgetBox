@@ -306,6 +306,32 @@ describe('dice controller', () => {
 });
 
 describe('dice Settings persistence and Presets', () => {
+  it('restores the default Settings in the selected Preset, keeping its name and the other Presets', () => {
+    const env = createTestEnv();
+    const dice = createDiceController(env);
+    const fresh = createDiceController(createTestEnv()).getState();
+    dice.addDie(20);
+    dice.setModifier(3);
+    dice.setSkipAnimation(true);
+    const first = dice.getState().selectedPresetId!;
+    dice.renamePreset(first, 'Mine');
+    dice.createPreset('Other');
+    dice.selectPreset(first);
+
+    dice.restoreDefaults();
+    const { diceSet, appearance, skipAnimation, sound, presets } = dice.getState();
+    expect({ diceSet, appearance, skipAnimation, sound }).toEqual({
+      diceSet: fresh.diceSet,
+      appearance: fresh.appearance,
+      skipAnimation: fresh.skipAnimation,
+      sound: fresh.sound,
+    });
+    expect(presets.map((preset) => preset.name)).toEqual(['Mine', 'Other']);
+    expect(createDiceController(env).getState().diceSet).toEqual(fresh.diceSet);
+    dice.selectPreset(presets[1]!.id);
+    expect(dice.getState().diceSet.modifier).toBe(3);
+  });
+
   it('keeps the dice set after a reload', () => {
     const env = createTestEnv();
     const before = createDiceController(env);

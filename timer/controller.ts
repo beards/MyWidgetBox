@@ -160,6 +160,8 @@ export interface TimerController {
   /** Replaces the appearance (applied live); invalid appearances are ignored. */
   setAppearance(appearance: Appearance): void;
   setShowFraction(on: boolean): void;
+  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. */
+  restoreDefaults(): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
   selectPreset(id: string): void;
@@ -604,6 +606,8 @@ export function createTimerController(
       writeRuns((current) => ({ ...current, [runScope(id)]: { ...current[from] } }));
       publish();
     },
+    // Runs are tagged with their timer's configuration, so ones that no longer fit end by themselves.
+    restoreDefaults: () => changeSettings(() => settings.update(timerSettingsSchema.defaults)),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
     deletePreset(id) {

@@ -8,7 +8,9 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="dice__language layout__language" id="language" data-controls></div>
+    <div class="dice__language layout__language" id="language" data-controls>
+      <a class="layout__home" href="../" data-i18n="home"></a>
+    </div>
     <main class="dice layout">
       <div class="layout__stage">
         <div class="dice__display layout__display" id="display">
@@ -37,6 +39,7 @@
         <div class="dice__presets">
           <button type="button" id="settings-export" data-i18n="exportSettings"></button>
           <label><span data-i18n="importSettings"></span> <input type="file" id="settings-import" accept="application/json,.json" /></label>
+          <button type="button" id="settings-restore" data-i18n="restoreDefaults"></button>
           <p id="settings-import-error" role="alert"></p>
         </div>
 

@@ -1,6 +1,6 @@
 /*
  * Shared page layout for Widgets (opt-in, ADR-0002). Markup:
- *   #language.layout__language          the language switcher (outside <main>)
+ *   #language.layout__language          the home link and the language switcher (outside <main>)
  *   main.layout
  *     div.layout__stage                 everything shown left: the display and its action buttons
  *       .layout__display                the Widget's display (grows to fill the stage)
@@ -16,6 +16,17 @@
  */
 .layout__stage {
   display: contents;
+}
+
+/* The link back to the catalog page, beside the language switcher. */
+.layout__language {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.layout__home {
+  color: inherit;
 }
 
 @media (min-width: 56.25em) {
@@ -81,7 +92,7 @@
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     width: var(--layout-panel-width);
     height: var(--layout-bar-height);
     margin: 0;

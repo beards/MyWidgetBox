@@ -87,6 +87,7 @@ const settingsFilePanel = mountSettingsFilePanel(i18n, {
   fileName: 'mywidgetbox-wheel-settings.json',
   exportSettings: () => wheel.exportSettings(),
   importSettings: (text) => wheel.importSettings(text),
+  restoreDefaults: () => wheel.restoreDefaults(),
 });
 const soundInputs = mountSoundInputs(wheel, sound, 'tick');
 

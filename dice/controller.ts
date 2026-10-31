@@ -147,6 +147,8 @@ export interface DiceController {
   /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
   setSound(next: Partial<SoundSettings>): void;
   setShakeToRoll(enabled: boolean): void;
+  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. */
+  restoreDefaults(): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
   selectPreset(id: string): void;
@@ -335,6 +337,7 @@ export function createDiceController(
       if (isSoundSettings(sound)) updateSettings({ sound });
     },
     setShakeToRoll: (shakeToRoll) => updateSettings({ shakeToRoll }),
+    restoreDefaults: () => changeSettings(() => settings.update(diceSettingsSchema.defaults)),
     createPreset: (name) => changeSettings(() => settings.createPreset(name)),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),

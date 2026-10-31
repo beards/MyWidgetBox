@@ -134,6 +134,8 @@ export interface WheelController {
   /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
   setAnimationDuration(ms: number): void;
   setAlwaysFullAnimation(always: boolean): void;
+  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. Nothing stays drawn; ignored while animating. */
+  restoreDefaults(): void;
   /** Saves the current Settings as a new Preset (with nothing drawn yet) and switches to it; ignored while animating. */
   createPreset(name: string): void;
   /** Ignored while animating. */
@@ -428,6 +430,13 @@ export function createWheelController(
       if (isAnimationDuration(ms)) setAnimation({ duration: ms });
     },
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),
+    restoreDefaults() {
+      if (state.animating) return;
+      settings.update(wheelSettingsSchema.defaults);
+      // The drawn ids belonged to the replaced entries.
+      setDrawn(() => []);
+      update(fromSettings());
+    },
     createPreset(name) {
       if (state.animating) return;
       settings.createPreset(name);

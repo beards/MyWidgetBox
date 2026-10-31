@@ -37,6 +37,9 @@ export type WheelMessageKey =
   | 'exportSettings'
   | 'importSettings'
   | 'importError'
+  | 'restoreDefaults'
+  | 'restoreDefaultsConfirm'
+  | 'home'
   | 'labelColor'
   | 'labelDirection'
   | 'labelDirectionAcross'
@@ -91,6 +94,9 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     exportSettings: 'Export',
     importSettings: 'Import',
     importError: 'This file could not be imported. Your Settings were not changed.',
+    restoreDefaults: 'Restore defaults',
+    restoreDefaultsConfirm: 'Replace the Settings of this Preset with the defaults?',
+    home: '← All widgets',
     labelColor: 'Wheel text color',
     labelDirection: 'Entry text direction',
     labelDirectionAcross: 'Across the sector',
@@ -144,6 +150,9 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     exportSettings: '匯出',
     importSettings: '匯入',
     importError: '無法匯入此檔案，現有 Settings 未變更。',
+    restoreDefaults: '回復預設值',
+    restoreDefaultsConfirm: '要把這個 Preset 的設定全部回復成預設值嗎？',
+    home: '← 所有工具',
     labelColor: '轉盤文字顏色',
     labelDirection: '選項文字方向',
     labelDirectionAcross: '橫跨扇形',

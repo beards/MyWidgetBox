@@ -79,6 +79,7 @@ mountSettingsFilePanel(i18n, {
   fileName: 'mywidgetbox-dice-settings.json',
   exportSettings: () => dice.exportSettings(),
   importSettings: (text) => dice.importSettings(text),
+  restoreDefaults: () => dice.restoreDefaults(),
 });
 const soundInputs = mountSoundInputs(dice, sound, 'diceHit');
 

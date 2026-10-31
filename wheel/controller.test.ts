@@ -206,6 +206,36 @@ describe('wheel fairness', () => {
   });
 });
 
+describe('wheel restore defaults', () => {
+  it('restores the default entries and Settings and clears the drawn entries', () => {
+    const env = createTestEnv({ random: [at(0.1), at(0.5)] });
+    const fresh = createWheelController(createTestEnv()).getState();
+    const wheel = wheelWith(env, [
+      { label: 'A', weight: 1 },
+      { label: 'B', weight: 1 },
+    ]);
+    wheel.setRemoveAfterDraw(true);
+    wheel.setAnimationDuration(2500);
+    wheel.spin();
+    wheel.finishAnimation();
+
+    wheel.restoreDefaults();
+    const state = wheel.getState();
+    expect(state.entries).toEqual(fresh.entries);
+    expect(state.remainingEntries).toEqual(fresh.entries);
+    expect(state.animationDuration).toBe(fresh.animationDuration);
+    expect(state.removeAfterDraw).toBe(false);
+    expect(state.appearance).toEqual(fresh.appearance);
+  });
+
+  it('is ignored while the wheel spins', () => {
+    const wheel = wheelWith(createTestEnv({ random: [at(0.1), at(0.5)] }), [{ label: 'A', weight: 1 }]);
+    wheel.spin();
+    wheel.restoreDefaults();
+    expect(wheel.getState().entries.map((entry) => entry.label)).toEqual(['A']);
+  });
+});
+
 describe('wheel Settings, Presets and Share link', () => {
   const page = 'https://example.test/MyWidgetBox/wheel/';
   const custom: WheelAppearance = {

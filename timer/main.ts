@@ -63,6 +63,7 @@ mountSettingsFilePanel(i18n, {
   fileName: 'mywidgetbox-timer-settings.json',
   exportSettings: () => timer.exportSettings(),
   importSettings: (text) => timer.importSettings(text),
+  restoreDefaults: () => timer.restoreDefaults(),
 });
 const soundInputs = mountSoundInputs(timer, sound, 'alert');
 
