@@ -127,6 +127,8 @@ function render(state: DiceState) {
   soundVolumeInput.disabled = !state.sound.enabled;
   if (document.activeElement !== soundUrlInput) soundUrlInput.value = state.sound.url;
   shakeInput.checked = state.shakeToRoll;
+  // Follows the Settings in effect, so a Preset switch or an import turns listening on or off.
+  syncShakes(state.shakeToRoll);
 
   groupList.replaceChildren(
     ...diceSet.groups.map(({ sides, count }) => {
@@ -193,6 +195,59 @@ function edit(action: () => void) {
   render(dice.getState());
 }
 
+// Shake to roll: roll() already ignores shakes while animating.
+let stopShakes: (() => void) | null = null;
+/** Set while listenForShakes is pending, so overlapping starts never add a second listener. */
+let startingShakes = false;
+let motionGranted = false;
+let waitingForGesture = false;
+/** The last start failed (denied, unsupported): not retried until the setting is toggled again. */
+let shakesFailed = false;
+/** iOS only grants motion access from a user gesture. */
+const needsGesture = typeof DeviceMotionEvent !== 'undefined' && 'requestPermission' in DeviceMotionEvent;
+
+async function startShakes() {
+  if (stopShakes || startingShakes) return;
+  startingShakes = true;
+  // Gate on the setting too, as a last guard between a Preset switch and the next render.
+  const result = await listenForShakes(() => dice.getState().shakeToRoll && dice.roll());
+  startingShakes = false;
+  if (typeof result !== 'function') {
+    shakesFailed = true;
+    shakeStatus.textContent = t(result === 'denied' ? 'shakeDenied' : 'shakeUnsupported');
+    return;
+  }
+  motionGranted = true;
+  shakeStatus.textContent = '';
+  // Turned off while permission was being asked for.
+  if (dice.getState().shakeToRoll) stopShakes = result;
+  else result();
+}
+
+function syncShakes(wanted: boolean) {
+  if (!wanted) {
+    stopShakes?.();
+    stopShakes = null;
+    shakesFailed = false;
+    shakeStatus.textContent = '';
+  } else if (!stopShakes && !startingShakes && !shakesFailed) {
+    if (!needsGesture || motionGranted) {
+      void startShakes();
+    } else if (!waitingForGesture) {
+      // Outside a gesture (page load, import): ask on the next tap.
+      waitingForGesture = true;
+      document.addEventListener(
+        'click',
+        () => {
+          waitingForGesture = false;
+          if (dice.getState().shakeToRoll) void startShakes();
+        },
+        { once: true },
+      );
+    }
+  }
+}
+
 dice.subscribe(render);
 i18n.subscribe(() => {
   renderAddSides();
@@ -255,38 +310,14 @@ soundUrlInput.addEventListener('change', () => {
   soundUrlInput.value = dice.getState().sound.url;
 });
 
-// Shake to roll: roll() already ignores shakes while animating.
-let stopShakes: (() => void) | null = null;
-async function startShakes() {
-  if (stopShakes) return;
-  // Gate on the setting too, so switching to a Preset with it off stops shake rolls.
-  const result = await listenForShakes(() => dice.getState().shakeToRoll && dice.roll());
-  if (typeof result === 'function') {
-    stopShakes = result;
-    shakeStatus.textContent = '';
-  } else {
-    shakeStatus.textContent = t(result === 'denied' ? 'shakeDenied' : 'shakeUnsupported');
-  }
-}
 shakeInput.addEventListener('change', () => {
-  dice.setShakeToRoll(shakeInput.checked);
+  // Called right in the gesture: iOS only grants motion access from one.
   if (shakeInput.checked) {
+    shakesFailed = false;
     void startShakes();
-  } else {
-    stopShakes?.();
-    stopShakes = null;
-    shakeStatus.textContent = '';
   }
+  dice.setShakeToRoll(shakeInput.checked);
 });
-if (dice.getState().shakeToRoll) {
-  // iOS only grants motion access from a user gesture, so wait for the first tap there.
-  const needsGesture = typeof DeviceMotionEvent !== 'undefined' && 'requestPermission' in DeviceMotionEvent;
-  if (needsGesture) {
-    document.addEventListener('click', () => dice.getState().shakeToRoll && void startShakes(), { once: true });
-  } else {
-    void startShakes();
-  }
-}
 settingsExport.addEventListener('click', () => {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([dice.exportSettings()], { type: 'application/json' }));
