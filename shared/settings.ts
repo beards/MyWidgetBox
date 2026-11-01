@@ -1,22 +1,16 @@
 import type { Env } from './env';
 
 /**
- * Shared (opt-in) Settings flow: versioned Settings per Widget, step-by-step migrations,
- * named Presets, and the load priority URL > storage > defaults, where any layer that
+ * Shared (opt-in) Settings flow: versioned Settings per Widget, named Presets, and the load priority URL > storage > defaults, where any layer that
  * fails to parse or validate falls through to the next one.
  */
-
-/** Upgrades raw Settings from version N to N + 1. Receives a plain object; may return anything. */
-export type Migration = (settings: Record<string, unknown>) => unknown;
 
 export interface SettingsSchema<S extends object> {
   /** Storage namespace, unique per Widget, e.g. 'dice'. */
   namespace: string;
-  /** Current schema version; bump it only when old data needs a Migration to stay meaningful. */
+  /** Current schema version; Settings written with any other version are not read. */
   version: number;
   defaults: S;
-  /** `migrations[n]` upgrades version n to n + 1; every version below `version` needs one. */
-  migrations?: Record<number, Migration>;
   /**
    * Checks Settings that already have missing fields filled from `defaults` and unknown
    * fields dropped. Returning false makes the whole layer (URL, stored Preset) fall through.
@@ -52,7 +46,7 @@ export interface SettingsStoreOptions {
   /**
    * URL layer of the load priority (filled in by the Share link ticket). Returns the
    * Settings encoded in the URL, or null when there are none. Throwing, or returning
-   * Settings that fail migration/validation, falls through to storage.
+   * Settings that fail validation, falls through to storage.
    */
   readUrl?: (url: URL) => VersionedSettings | null;
 }
@@ -74,7 +68,7 @@ export interface SettingsStore<S> {
   /** JSON backup of every Preset, with the schema version and the Widget's namespace. */
   exportFile(): string;
   /**
-   * Replaces all Presets with those in an export file, migrated and validated like stored
+   * Replaces all Presets with those in an export file, validated like stored
    * ones. Returns false and changes nothing when the file (or any Preset in it) is unreadable.
    */
   importFile(text: string): boolean;
@@ -97,18 +91,12 @@ export function settingsStorageKey(namespace: string): string {
 }
 
 /**
- * Migrates and validates Settings from any supported version to the current one.
+ * Validates Settings written with the current schema version.
  * Returns null when they cannot be read. Reusable by Share link decoding and import.
  */
-export function parseSettings<S extends object>(schema: SettingsSchema<S>, input: VersionedSettings): S | null {
+export function parseSettings<S extends object>(schema: SettingsSchema<S>, { version, settings }: VersionedSettings): S | null {
   try {
-    let { version, settings } = input;
-    if (!Number.isInteger(version) || version < 1 || version > schema.version) return null;
-    for (; version < schema.version; version++) {
-      const migrate = schema.migrations?.[version];
-      if (!migrate || !isPlainObject(settings)) return null;
-      settings = migrate(settings);
-    }
+    if (version !== schema.version) return null;
     const filled = fillFromDefaults(schema.defaults, settings);
     return schema.isValid(filled) ? filled : null;
   } catch {

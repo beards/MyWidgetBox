@@ -225,15 +225,6 @@ describe('wheel result pop-up', () => {
     expect(wheel.getState().result).toEqual({ autoHide: true, seconds: 12 });
     expect(createWheelController(env).getState().result).toEqual({ autoHide: true, seconds: 12 });
   });
-
-  it('fills the defaults into Settings saved before the option existed', () => {
-    const env = createTestEnv();
-    const exported = JSON.parse(createWheelController(env).exportSettings());
-    delete exported.presets[0].settings.result;
-    const wheel = createWheelController(createTestEnv());
-    expect(wheel.importSettings(JSON.stringify(exported))).toBe(true);
-    expect(wheel.getState().result).toEqual({ autoHide: false, seconds: 4 });
-  });
 });
 
 describe('wheel result pop-up text size', () => {
@@ -250,14 +241,6 @@ describe('wheel result pop-up text size', () => {
     }
     wheel.setAppearance({ ...appearance, resultTextSize: RESULT_TEXT_SIZE_MAX });
     expect(wheel.getState().appearance.resultTextSize).toBe(RESULT_TEXT_SIZE_MAX);
-  });
-
-  it('fills the default into Settings saved before the option existed', () => {
-    const exported = JSON.parse(createWheelController(createTestEnv()).exportSettings());
-    delete exported.presets[0].settings.appearance.resultTextSize;
-    const wheel = createWheelController(createTestEnv());
-    expect(wheel.importSettings(JSON.stringify(exported))).toBe(true);
-    expect(wheel.getState().appearance.resultTextSize).toBe(12);
   });
 });
 
@@ -343,20 +326,6 @@ describe('wheel Settings, Presets and Share link', () => {
     }
     wheel.setAppearance({ ...appearance, limitLabelSize: true, maxLabelSize: LABEL_SIZE_LIMIT_MIN });
     expect(wheel.getState().appearance).toMatchObject({ limitLabelSize: true, maxLabelSize: LABEL_SIZE_LIMIT_MIN });
-  });
-
-  it('keeps Settings saved before the entry text options existed, with their defaults', () => {
-    const env = createTestEnv();
-    const wheel = createWheelController(env);
-    const file = JSON.parse(wheel.exportSettings());
-    for (const preset of file.presets) {
-      delete preset.settings.appearance.labelDirection;
-      delete preset.settings.appearance.limitLabelSize;
-      delete preset.settings.appearance.maxLabelSize;
-      preset.settings.appearance.labelColor = '#123456';
-    }
-    expect(wheel.importSettings(JSON.stringify(file))).toBe(true);
-    expect(wheel.getState().appearance).toMatchObject({ labelColor: '#123456', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20 });
   });
 
   it('keeps entries per Preset', () => {
@@ -575,14 +544,6 @@ describe('wheel drawn State scope', () => {
     spinAndFinish(wheel);
     const opened = createWheelController({ ...env, url: new URL(wheel.shareLink()) });
     expect(opened.getState()).toMatchObject({ drawnEntryIds: [], selectedPresetId: null });
-  });
-
-  it('keeps draws stored before they were kept per Preset', () => {
-    const env = createTestEnv();
-    env.storage.setItem(WHEEL_STATE_KEY, JSON.stringify({ version: 1, drawn: ['2'] }));
-    const wheel = createWheelController(env);
-    wheel.setRemoveAfterDraw(true);
-    expect(wheel.getState().drawnEntryIds).toEqual(['2']);
   });
 
   it('a tab picks up draws made in another tab', () => {

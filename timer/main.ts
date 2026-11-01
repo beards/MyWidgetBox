@@ -1,5 +1,5 @@
 // View layer: owns the DOM, subscribes to the controller, and calls its actions.
-import type { Appearance } from '../shared/appearance';
+import type { ScaledAppearance } from '../shared/appearance';
 import { applyAppearance, mountAppearancePanel } from '../shared/appearance-dom';
 import { applyDisplayMode } from '../shared/display-mode';
 import { createBrowserEnv } from '../shared/env';
@@ -47,8 +47,9 @@ const wakeLock = createWakeLock();
 /** Stop functions of the alert sounds playing now, by timer id. */
 const alertSounds = new Map<string, () => void>();
 
-const appearancePanel = mountAppearancePanel<Appearance>($('#appearance'), {
+const appearancePanel = mountAppearancePanel<ScaledAppearance>($('#appearance'), {
   i18n,
+  scale: true,
   onChange(appearance) {
     timer.setAppearance(appearance);
     appearancePanel.update(timer.getState().appearance);

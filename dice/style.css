@@ -13,7 +13,7 @@ body {
   gap: 1.5rem;
 }
 
-/* Font, text color and scale come from the appearance Settings (applied inline). */
+/* Font and text color come from the appearance Settings (applied inline). */
 .dice__display {
   position: relative;
   display: flex;

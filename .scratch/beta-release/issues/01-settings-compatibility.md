@@ -7,8 +7,10 @@ Blocked by: None (can start immediately)
 
 **測試版完成時要做的事：**
 
-- [ ] 決定各 Widget 的 Settings schema 從哪個版本開始承諾相容（例如統一重設為 version 1，或維持當時的版本）
-- [ ] 確認之後任何改變設定意義或移除欄位的修改，都要附 Migration 與測試（SettingsSchema 的 `migrations`）
-- [ ] 檢查並清掉測試版期間留下、只為舊資料存在的邏輯（例如 timer 的 version 1 → 2 Migration 是否保留）
+- [ ] 決定各 Widget 的 Settings schema 從哪個版本開始承諾相容（目前全部是 version 1，State 存檔也是）
+- [ ] 把 Migration 機制加回 `shared/settings.ts`（2026-11-01 清理時已整個拿掉：現在只讀與 schema 版本完全相同的資料），之後任何改變設定意義或移除欄位的修改都要附 Migration 與測試
+- [ ] 檢查並清掉測試版期間留下、只為舊資料存在的邏輯
+
+**2026-11-01 已清理：** 共用 Migration 機制、timer 的 v1→v2 Migration、timer / wheel State 讀 version 1 格式的邏輯、骰子沒用到的 `scale` 欄位、骰子的 `tableFinish`（背景改成直接存 `background.kind`，含 `felt`），以及只為舊資料存在的測試。保留缺欄位從預設值補上（fillFromDefaults），那是通用機制。
 
 ## Comments

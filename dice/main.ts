@@ -23,8 +23,6 @@ import {
   TABLE_BOUNCE_MAX,
   animationFor,
   createDiceController,
-  diceBackdrop,
-  withDiceBackdrop,
   formatOutcome,
   outcomeTerms,
 } from './controller';
@@ -74,10 +72,8 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let playing: DiceOutcome | null = null;
 const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelector<HTMLElement>('#appearance')!, {
   i18n,
-  // The dice offer their own background choice (mountBackdrop), which includes the table.
+  // The dice offer their own background choice (mountBackdrop), which includes the felt.
   background: false,
-  // The dice size slider (mountDiceSize) takes the place of the shared zoom.
-  scale: false,
   fontSizeRange: RESULT_TEXT_SIZE_RANGE,
   textColorQuickColors: true,
   fields: [
@@ -129,7 +125,7 @@ function render(state: DiceState) {
   // With a transparent background only the dice and their shadows show (e.g. over a stream in OBS).
   const transparent = displayOptions.transparent || appearance.background.kind === 'transparent';
   // The felt fills the whole page, so the dice area has no visible edge; the dice cast shadows on any background.
-  if (!transparent && diceBackdrop(appearance) === 'felt') paintFelt(document.documentElement, appearance.background.color);
+  if (!transparent && appearance.background.kind === 'felt') paintFelt(document.documentElement, appearance.background.color);
   else clearFelt(document.documentElement);
   appearancePanel.update(appearance);
   backdropInputs.update(appearance);
@@ -396,13 +392,15 @@ function mountBackdrop(heading: HTMLElement): { update(appearance: DiceAppearanc
     image.text.textContent = t('imageUrl');
     const selected = select.value;
     select.replaceChildren(...DICE_BACKDROPS.map((backdrop) => new Option(t(BACKDROP_LABELS[backdrop]), backdrop)));
-    select.value = selected || diceBackdrop(dice.getState().appearance);
+    select.value = selected || dice.getState().appearance.background.kind;
   };
   relabel();
   i18n.subscribe(relabel);
 
   const appearance = () => dice.getState().appearance;
-  select.addEventListener('change', () => dice.setAppearance(withDiceBackdrop(appearance(), select.value as DiceBackdrop)));
+  select.addEventListener('change', () =>
+    dice.setAppearance({ ...appearance(), background: { ...appearance().background, kind: select.value as DiceBackdrop } }),
+  );
   backgroundColor.addEventListener('input', () =>
     dice.setAppearance({ ...appearance(), background: { ...appearance().background, color: backgroundColor.value } }),
   );
@@ -417,7 +415,7 @@ function mountBackdrop(heading: HTMLElement): { update(appearance: DiceAppearanc
 
   return {
     update(next) {
-      const backdrop = diceBackdrop(next);
+      const backdrop = next.background.kind;
       select.value = backdrop;
       backgroundColor.value = next.background.color;
       if (document.activeElement !== imageUrl) imageUrl.value = next.background.imageUrl;

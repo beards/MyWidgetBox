@@ -1,4 +1,4 @@
-import { type Appearance, appearanceDefaults, isAppearance } from '../shared/appearance';
+import { type ScaledAppearance, isScaledAppearance, scaledAppearanceDefaults } from '../shared/appearance';
 import type { Env } from '../shared/env';
 import {
   type PresetSummary,
@@ -50,7 +50,7 @@ export interface TimerSettings {
   timers: TimerConfig[];
   /** Show hundredths of a second on every timer. */
   showFraction: boolean;
-  appearance: Appearance;
+  appearance: ScaledAppearance;
   alert: TimerAlertSettings;
   sound: SoundSettings;
 }
@@ -83,7 +83,7 @@ export interface TimerView extends TimerConfig {
 export interface TimerState {
   timers: TimerView[];
   showFraction: boolean;
-  appearance: Appearance;
+  appearance: ScaledAppearance;
   alert: TimerAlertSettings;
   sound: SoundSettings;
   presets: PresetSummary[];
@@ -158,7 +158,7 @@ export interface TimerController {
   /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
   setSound(next: Partial<SoundSettings>): void;
   /** Replaces the appearance (applied live); invalid appearances are ignored. */
-  setAppearance(appearance: Appearance): void;
+  setAppearance(appearance: ScaledAppearance): void;
   setShowFraction(on: boolean): void;
   /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. */
   restoreDefaults(): void;
@@ -183,7 +183,7 @@ export const MAX_ALERT_EFFECT_SECONDS = 3600;
 
 /** Storage key of the State (running timers), separate from the Settings. */
 export const TIMER_STATE_KEY = 'mywidgetbox:timer:state';
-const STATE_VERSION = 2;
+const STATE_VERSION = 1;
 
 /** A run as stored, with the timer configuration it was started for (see runConfig). */
 interface StoredRun extends TimerRun {
@@ -217,29 +217,20 @@ const DEFAULT_TARGET = '21:00';
 
 export const timerSettingsSchema: SettingsSchema<TimerSettings> = {
   namespace: 'timer',
-  version: 2,
+  version: 1,
   // Note: fields inside `timers` entries are not filled from defaults (arrays are taken
-  // whole), so adding a field to TimerConfig needs a version bump and a Migration.
+  // whole), so stored timers missing a field are not read.
   defaults: {
     timers: [{ id: '1', name: '', mode: 'countdown', duration: 5 * 60 * 1000, target: DEFAULT_TARGET }],
     showFraction: false,
-    appearance: { ...appearanceDefaults, fontSize: 96 },
+    appearance: { ...scaledAppearanceDefaults, fontSize: 96 },
     alert: { soundSeconds: 5, effectSeconds: 10 },
     sound: soundDefaults,
-  },
-  migrations: {
-    // Ticket 13 added `target` to every timer.
-    1: (settings) => ({
-      ...settings,
-      timers: Array.isArray(settings.timers)
-        ? settings.timers.map((timer: unknown) => (isPlainObject(timer) ? { target: DEFAULT_TARGET, ...timer } : timer))
-        : settings.timers,
-    }),
   },
   isValid: (settings): settings is TimerSettings =>
     isTimerList((settings as TimerSettings).timers) &&
     typeof (settings as TimerSettings).showFraction === 'boolean' &&
-    isAppearance((settings as TimerSettings).appearance) &&
+    isScaledAppearance((settings as TimerSettings).appearance) &&
     isAlertSettings((settings as TimerSettings).alert) &&
     isSoundSettings((settings as TimerSettings).sound),
 };
@@ -404,26 +395,15 @@ export function createTimerController(
     try {
       const data: unknown = JSON.parse(raw ?? 'null');
       if (!isPlainObject(data)) return {};
-      if (data.version === 1 && isPlainObject(data.timers)) return fromVersion1(data.timers);
       if (data.version !== STATE_VERSION || !isPlainObject(data.scopes)) return {};
       return Object.fromEntries(
         Object.entries(data.scopes)
           .filter(([, byId]) => isPlainObject(byId))
-          .map(([key, byId]) => [key, validRuns(byId as Record<string, unknown>, (run) => isStoredRun(run))]),
+          .map(([key, byId]) => [key, validRuns(byId as Record<string, unknown>, isStoredRun)]),
       );
     } catch {
       return {};
     }
-  }
-
-  /** Version 1 kept runs by timer id only; they belonged to whatever Settings were in effect. */
-  function fromVersion1(timers: Record<string, unknown>): ScopedRuns {
-    const byId: Record<string, StoredRun> = {};
-    for (const [id, run] of Object.entries(validRuns(timers, isTimerRun))) {
-      const config = configOf(id);
-      if (config) byId[id] = { ...run, config: runConfig(config) };
-    }
-    return { [scope()]: byId };
   }
 
   /** Re-reads the stored runs before writing, so changes made meanwhile in another tab survive. */
@@ -592,7 +572,7 @@ export function createTimerController(
       if (isSoundSettings(sound)) changeSettings(() => settings.update({ ...current, sound }));
     },
     setAppearance(appearance) {
-      if (!isAppearance(appearance)) return;
+      if (!isScaledAppearance(appearance)) return;
       changeSettings(() => settings.update({ ...settings.getSnapshot().settings, appearance }));
     },
     setShowFraction(on) {

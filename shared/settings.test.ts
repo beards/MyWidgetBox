@@ -10,8 +10,7 @@ import {
 } from './settings';
 import { createTestEnv } from './test-env';
 
-// A Widget whose Settings went through two schema changes:
-// v1 { size: number }  ->  v2 { width: number }  ->  v3 { width: number, look: { color: string } }
+// A Widget at schema version 3; Settings written with any other version are not read.
 interface TimerLikeSettings {
   width: number;
   look: { color: string };
@@ -21,10 +20,6 @@ const schema: SettingsSchema<TimerLikeSettings> = {
   namespace: 'sample',
   version: 3,
   defaults: { width: 10, look: { color: 'red' } },
-  migrations: {
-    1: ({ size }) => ({ width: size }),
-    2: (settings) => settings, // v3 only added `look`, which is filled from defaults.
-  },
   isValid: (settings): settings is TimerLikeSettings => {
     const { width, look } = settings as TimerLikeSettings;
     return typeof width === 'number' && typeof look.color === 'string';
@@ -41,9 +36,9 @@ describe('Settings store', () => {
     expect(store.getSnapshot()).toMatchObject({ settings: { width: 10, look: { color: 'red' } }, source: 'defaults' });
   });
 
-  it('migrates stored Settings from an old version step by step', () => {
+  it('reads stored Settings written with the current version', () => {
     const env = createTestEnv();
-    env.storage.setItem(settingsStorageKey('sample'), storeDocument(1, { size: 42 }));
+    env.storage.setItem(settingsStorageKey('sample'), storeDocument(3, { width: 42 }));
 
     const store = createSettingsStore(env, schema);
     expect(store.getSnapshot()).toMatchObject({ settings: { width: 42, look: { color: 'red' } }, source: 'storage' });
@@ -56,8 +51,8 @@ describe('Settings store', () => {
     expect(createSettingsStore(env, schema).getSnapshot().settings).toEqual({ width: 5, look: { color: 'red' } });
   });
 
-  it('falls back to defaults when a migration fails or the version is unknown', () => {
-    for (const stored of [storeDocument(1, 'not an object'), storeDocument(0, {}), storeDocument(4, {})]) {
+  it('falls back to defaults when the Settings are unreadable or written with another version', () => {
+    for (const stored of [storeDocument(3, 'not an object'), storeDocument(2, { width: 1 }), storeDocument(4, { width: 1 })]) {
       const env = createTestEnv();
       env.storage.setItem(settingsStorageKey('sample'), stored);
       expect(createSettingsStore(env, schema).getSnapshot().source).toBe('defaults');
@@ -103,7 +98,7 @@ describe('Settings store', () => {
   it('round-trips serialized Settings through parseSettings', () => {
     const settings = { width: 8, look: { color: 'green' } };
     expect(parseSettings(schema, serializeSettings(schema, settings))).toEqual(settings);
-    expect(parseSettings(schema, { version: 1, settings: { size: 2 } })).toEqual({ width: 2, look: { color: 'red' } });
+    expect(parseSettings(schema, { version: 2, settings: { width: 2 } })).toBeNull();
     expect(parseSettings(schema, { version: 3, settings: { width: null } })).toBeNull();
   });
 });
@@ -129,12 +124,7 @@ describe('Settings store URL layer', () => {
     expect(snapshot.presets).toEqual([{ id: '1', name: 'Saved' }]);
   });
 
-  it('migrates old-version Settings from the URL', () => {
-    const env = createTestEnv({ url: urlWith('{"version":1,"settings":{"size":4}}') });
-    expect(createSettingsStore(env, schema, { readUrl: urlLayer }).getSnapshot().settings.width).toBe(4);
-  });
-
-  it.each(['{"version":3,"settings":{"width":"x"}}', '{broken', '{"version":7,"settings":{}}'])(
+  it.each(['{"version":3,"settings":{"width":"x"}}', '{broken', '{"version":2,"settings":{"width":4}}'])(
     'falls through to storage when the URL Settings cannot be read: %s',
     (payload) => {
       const env = envWithStoredWidth(urlWith(payload), 5);
@@ -188,22 +178,6 @@ describe('Settings export / import', () => {
     expect(JSON.parse(file)).toMatchObject({ namespace: 'sample', version: 3 });
   });
 
-  it('migrates an export file written by an old version', () => {
-    const store = createSettingsStore(createTestEnv(), schema);
-    const old = JSON.stringify({
-      namespace: 'sample',
-      version: 1,
-      selectedPresetId: '7',
-      presets: [{ id: '7', name: 'Old', settings: { size: 8 } }],
-    });
-    expect(store.importFile(old)).toBe(true);
-    expect(store.getSnapshot()).toMatchObject({
-      settings: { width: 8, look: { color: 'red' } },
-      presets: [{ id: '7', name: 'Old' }],
-      source: 'storage',
-    });
-  });
-
   it('rejects invalid files and keeps the current Settings', () => {
     const env = createTestEnv();
     const store = createSettingsStore(env, schema);
@@ -217,7 +191,7 @@ describe('Settings export / import', () => {
       '[]',
       JSON.stringify({ ...valid, presets: [] }),
       JSON.stringify({ ...valid, namespace: 'other', presets: preset({ width: 1 }) }),
-      JSON.stringify({ ...valid, version: 9, presets: preset({ width: 1 }) }),
+      JSON.stringify({ ...valid, version: 2, presets: preset({ width: 1 }) }),
       JSON.stringify({ ...valid, presets: preset({ width: 'x' }) }),
     ]) {
       expect(store.importFile(file)).toBe(false);

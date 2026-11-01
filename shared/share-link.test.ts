@@ -3,17 +3,15 @@ import { type SettingsSchema, createSettingsStore, serializeSettings, settingsSt
 import { createShareLink, readDisplayOptions, readShareLinkSettings } from './share-link';
 import { createTestEnv } from './test-env';
 
-// A wheel-like Widget whose Settings changed shape once:
-// v1 { items: string[] }  ->  v2 { entries: { label: string }[] }
+// A wheel-like Widget.
 interface WheelLikeSettings {
   entries: { label: string }[];
 }
 
 const schema: SettingsSchema<WheelLikeSettings> = {
   namespace: 'wheel-like',
-  version: 2,
+  version: 1,
   defaults: { entries: [{ label: 'A' }] },
-  migrations: { 1: ({ items }) => ({ entries: (items as string[]).map((label) => ({ label })) }) },
   isValid: (settings): settings is WheelLikeSettings =>
     Array.isArray((settings as WheelLikeSettings).entries) &&
     (settings as WheelLikeSettings).entries.every((entry) => typeof entry.label === 'string'),
@@ -30,13 +28,8 @@ describe('Share link', () => {
     expect(open(link).getSnapshot()).toMatchObject({ settings, source: 'url' });
   });
 
-  it('opens an old-version Share link after migrating it', () => {
-    const v1Link = createShareLink(page, { version: 1, settings: { items: ['Alice', 'Bob'] } });
-    expect(open(v1Link).getSnapshot().settings).toEqual({ entries: [{ label: 'Alice' }, { label: 'Bob' }] });
-  });
-
   it('never writes to storage when opened', () => {
-    const env = createTestEnv({ url: createShareLink(page, { version: 2, settings: { entries: [{ label: 'X' }] } }) });
+    const env = createTestEnv({ url: createShareLink(page, { version: 1, settings: { entries: [{ label: 'X' }] } }) });
     const store = createSettingsStore(env, schema, { readUrl: readShareLinkSettings });
     store.update({ entries: [{ label: 'Y' }] });
     expect(env.storage.getItem(settingsStorageKey('wheel-like'))).toBeNull();

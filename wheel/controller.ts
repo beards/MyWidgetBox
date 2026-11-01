@@ -1,4 +1,4 @@
-import { type Appearance, appearanceDefaults, isAppearance, isHexColor } from '../shared/appearance';
+import { type ScaledAppearance, isHexColor, isScaledAppearance, scaledAppearanceDefaults } from '../shared/appearance';
 import {
   type AnimationSettings,
   MAX_ANIMATION_DURATION,
@@ -55,7 +55,7 @@ export interface Sector {
 }
 
 /** The shared appearance baseline plus the wheel's own items. */
-export interface WheelAppearance extends Appearance {
+export interface WheelAppearance extends ScaledAppearance {
   /** `#rrggbb` color of the sector labels. */
   labelColor: string;
   /** `#rrggbb` color of the pointer. */
@@ -168,7 +168,7 @@ export interface WheelController {
 
 /** Storage key of the State (drawn entries), separate from the Settings. */
 export const WHEEL_STATE_KEY = 'mywidgetbox:wheel:state';
-const STATE_VERSION = 2;
+const STATE_VERSION = 1;
 
 /**
  * Drawn entries are kept per Preset (and one scope for Settings opened from a Share link),
@@ -207,7 +207,7 @@ export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
   // Fields added later need no version bump: missing ones are filled from these defaults.
   defaults: {
     entries: defaultEntries,
-    appearance: { ...appearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20, resultTextSize: 12 },
+    appearance: { ...scaledAppearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20, resultTextSize: 12 },
     animation: { duration: 5000, alwaysFull: false },
     removeAfterDraw: false,
     sound: soundDefaults,
@@ -262,7 +262,7 @@ function isWheelAppearance(value: unknown): value is WheelAppearance {
   const { labelColor, pointerColor, labelDirection, limitLabelSize, maxLabelSize, resultTextSize } = (value ??
     {}) as Partial<WheelAppearance>;
   return (
-    isAppearance(value) &&
+    isScaledAppearance(value) &&
     isHexColor(labelColor) &&
     isHexColor(pointerColor) &&
     LABEL_DIRECTIONS.includes(labelDirection as LabelDirection) &&
@@ -323,8 +323,6 @@ export function createWheelController(
     try {
       const data: unknown = JSON.parse(raw ?? 'null');
       if (!isPlainObject(data)) return {};
-      // Version 1 kept one list; it belonged to whatever Settings were in effect.
-      if (data.version === 1) return Array.isArray(data.drawn) ? { [scope()]: ids(data.drawn) } : {};
       if (data.version !== STATE_VERSION || !isPlainObject(data.scopes)) return {};
       return Object.fromEntries(
         Object.entries(data.scopes).flatMap(([key, list]) => (Array.isArray(list) ? [[key, ids(list)]] : [])),

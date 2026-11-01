@@ -12,24 +12,29 @@ export type BackgroundKind = (typeof BACKGROUND_KINDS)[number];
 /**
  * One flat object for all kinds, so switching kind keeps the color and image URL the user
  * entered (and so missing fields can be filled from defaults). `transparent` is also what
- * Display mode reuses for overlays.
+ * Display mode reuses for overlays. A Widget may offer kinds of its own (e.g. the dice felt);
+ * any kind other than `transparent` and `image` is painted in the color.
  */
-export interface Background {
-  kind: BackgroundKind;
+export interface Background<K extends string = BackgroundKind> {
+  kind: K;
   /** `#rrggbb`; the page color for `solid`, and shown under the image for `image`. */
   color: string;
   /** http(s) URL, or '' when none has been entered. Used by `image`. */
   imageUrl: string;
 }
 
-export interface Appearance {
-  background: Background;
+export interface Appearance<K extends string = BackgroundKind> {
+  background: Background<K>;
   /** CSS font-family list, or '' for the page default. */
   fontFamily: string;
   /** Text size in CSS px. */
   fontSize: number;
   /** `#rrggbb` text color of the display. */
   textColor: string;
+}
+
+/** The baseline plus a zoom, for a Widget whose display is plain DOM (the dice size their 3D scene instead). */
+export interface ScaledAppearance extends Appearance {
   /** Overall zoom factor of the Widget's display. */
   scale: number;
 }
@@ -43,28 +48,38 @@ export const appearanceDefaults: Appearance = {
   fontFamily: '',
   fontSize: 20,
   textColor: '#222222',
-  scale: 1,
 };
+
+export const scaledAppearanceDefaults: ScaledAppearance = { ...appearanceDefaults, scale: 1 };
 
 export function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 }
 
-/** Checks the baseline fields; a Widget's `isValid` calls this and checks its own items too. */
-export function isAppearance(value: unknown): value is Appearance {
-  const { background, fontFamily, fontSize, textColor, scale } = (value ?? {}) as Partial<Appearance>;
+/**
+ * Checks the baseline fields, with the background kinds the Widget offers; a Widget's `isValid`
+ * calls this and checks its own items too.
+ */
+export function isAppearance<K extends string = BackgroundKind>(
+  value: unknown,
+  kinds: readonly K[] = BACKGROUND_KINDS as readonly string[] as readonly K[],
+): value is Appearance<K> {
+  const { background, fontFamily, fontSize, textColor } = (value ?? {}) as Partial<Appearance<K>>;
   return (
     typeof background === 'object' &&
     background !== null &&
-    BACKGROUND_KINDS.includes(background.kind) &&
+    kinds.includes(background.kind) &&
     isHexColor(background.color) &&
     isHttpUrlOrEmpty(background.imageUrl) &&
     typeof fontFamily === 'string' &&
     fontFamily.length <= MAX_FONT_FAMILY_LENGTH &&
     inRange(fontSize, FONT_SIZE_RANGE) &&
-    isHexColor(textColor) &&
-    inRange(scale, SCALE_RANGE)
+    isHexColor(textColor)
   );
+}
+
+export function isScaledAppearance(value: unknown): value is ScaledAppearance {
+  return isAppearance(value) && inRange((value as Partial<ScaledAppearance>).scale, SCALE_RANGE);
 }
 
 function inRange(value: unknown, { min, max }: { min: number; max: number }): value is number {

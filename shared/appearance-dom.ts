@@ -3,6 +3,7 @@ import {
   type Appearance,
   BACKGROUND_KINDS,
   type BackgroundKind,
+  type ScaledAppearance,
   FONT_SIZE_RANGE,
   MAX_FONT_FAMILY_LENGTH,
   SCALE_RANGE,
@@ -30,7 +31,7 @@ export interface ApplyAppearanceOptions {
  * A Widget applies its own items (e.g. colors) itself.
  */
 export function applyAppearance(
-  { background, fontFamily, fontSize, textColor, scale }: Appearance,
+  { background, fontFamily, fontSize, textColor, scale }: Appearance<string> & Partial<Pick<ScaledAppearance, 'scale'>>,
   targets: AppearanceTargets,
   { forceTransparent = false }: ApplyAppearanceOptions = {},
 ): void {
@@ -47,7 +48,7 @@ export function applyAppearance(
   display.fontFamily = fontFamily;
   display.fontSize = `${fontSize}px`;
   display.color = textColor;
-  display.zoom = String(scale);
+  display.zoom = scale === undefined ? '' : String(scale);
 }
 
 /** A Widget-specific color item shown after the baseline items. */
@@ -58,7 +59,10 @@ export interface AppearanceColorField<A> {
   quickColors?: boolean;
 }
 
-export interface AppearancePanelOptions<A extends Appearance> {
+/** What the panel edits: the baseline with any background kinds, and the zoom when the Widget has one. */
+type PanelAppearance = Appearance<string> & Partial<Pick<ScaledAppearance, 'scale'>>;
+
+export interface AppearancePanelOptions<A extends PanelAppearance> {
   i18n: I18n<AppearanceMessageKey>;
   fields?: AppearanceColorField<A>[];
   /** False for a Widget that sizes its text another way. */
@@ -67,7 +71,7 @@ export interface AppearancePanelOptions<A extends Appearance> {
   textColor?: boolean;
   /** False for a Widget that offers its own background choice (placed right after the heading). */
   background?: boolean;
-  /** False for a Widget that sizes its display another way. */
+  /** True for a Widget with a zoom (ScaledAppearance). */
   scale?: boolean;
   /** Narrower text size slider range than FONT_SIZE_RANGE (the Widget validates it too). */
   fontSizeRange?: { min: number; max: number };
@@ -99,7 +103,7 @@ const BACKGROUND_LABELS: Record<BackgroundKind, AppearanceMessageKey> = {
 };
 
 /** Builds the appearance form inside container. Text follows the i18n locale. */
-export function mountAppearancePanel<A extends Appearance>(
+export function mountAppearancePanel<A extends PanelAppearance>(
   container: HTMLElement,
   {
     i18n,
@@ -107,7 +111,7 @@ export function mountAppearancePanel<A extends Appearance>(
     fontSize: showFontSize = true,
     textColor: showTextColor = true,
     background: showBackground = true,
-    scale: showScale = true,
+    scale: showScale = false,
     fontSizeRange = FONT_SIZE_RANGE,
     textColorQuickColors = false,
     onChange,
@@ -160,7 +164,7 @@ export function mountAppearancePanel<A extends Appearance>(
     Object.entries(attributes).forEach(([name, value]) => element.setAttribute(name, value));
     return element;
   };
-  const withBackground = (appearance: A, change: Partial<Appearance['background']>): A => ({
+  const withBackground = (appearance: A, change: Partial<Appearance<string>['background']>): A => ({
     ...appearance,
     background: { ...appearance.background, ...change },
   });
@@ -254,15 +258,19 @@ export function mountAppearancePanel<A extends Appearance>(
     (element, appearance) => (element.value = appearance.textColor),
   );
 
-  const scale = input('range', { min: String(SCALE_RANGE.min), max: String(SCALE_RANGE.max), step: '0.05' });
-  const scaleValue = document.createElement('output');
-  row('scale', () => t('scale'), scale, scaleValue).hidden = !showScale;
-  bind(
-    scale,
-    (element, appearance) => ({ ...appearance, scale: element.valueAsNumber }),
-    (element, appearance) => (element.value = String(appearance.scale)),
-  );
-  syncs.push(() => (scaleValue.textContent = current ? `${Math.round(current.scale * 100)}%` : ''));
+  if (showScale) mountScale();
+
+  function mountScale() {
+    const scale = input('range', { min: String(SCALE_RANGE.min), max: String(SCALE_RANGE.max), step: '0.05' });
+    const scaleValue = document.createElement('output');
+    row('scale', () => t('scale'), scale, scaleValue);
+    bind(
+      scale,
+      (element, appearance) => ({ ...appearance, scale: element.valueAsNumber }),
+      (element, appearance) => (element.value = String(appearance.scale)),
+    );
+    syncs.push(() => (scaleValue.textContent = current?.scale === undefined ? '' : `${Math.round(current.scale * 100)}%`));
+  }
 
   for (const field of fields) {
     const element = input('color');

@@ -9,10 +9,7 @@ import {
   type DiceController,
   type DieSides,
   DICE_BACKDROPS,
-  TABLE_FINISHES,
   animationFor,
-  diceBackdrop,
-  withDiceBackdrop,
   createDiceController,
   formatOutcome,
   outcomeTerms,
@@ -372,34 +369,6 @@ describe('dice Settings persistence and Presets', () => {
     expect(after.getState().alwaysFullAnimation).toBe(true);
   });
 
-  it('opens a Preset stored with the former animation length, dropping the length', () => {
-    const env = createTestEnv();
-    env.storage.setItem(
-      settingsStorageKey('dice'),
-      JSON.stringify({
-        version: 1,
-        presets: [
-          {
-            id: '1',
-            name: 'Old',
-            settings: { diceSet: { groups: [{ sides: 20, count: 2 }], modifier: 1 }, animation: { duration: 6500, alwaysFull: true } },
-          },
-        ],
-        selectedPresetId: '1',
-      }),
-    );
-
-    const dice = createDiceController(env);
-    expect(dice.getState().diceSet).toEqual({ groups: [{ sides: 20, count: 2 }], modifier: 1 });
-    expect(dice.getState()).toMatchObject({ skipAnimation: false, alwaysFullAnimation: true });
-    expect(dice.getState()).not.toHaveProperty('animationDuration');
-    dice.setModifier(2);
-    expect(JSON.parse(env.storage.getItem(settingsStorageKey('dice'))!).presets[0].settings.animation).toEqual({
-      skip: false,
-      alwaysFull: true,
-    });
-  });
-
   it('remembers sound settings after a reload and per Preset', () => {
     const env = createTestEnv();
     const before = createDiceController(env);
@@ -553,59 +522,33 @@ describe('dice appearance Settings', () => {
     fontFamily: 'Georgia, serif',
     fontSize: 32,
     textColor: '#eeeeee',
-    scale: 1.5,
     showResultText: false,
     diceSize: 1.5,
     dieColor: '#ff0000',
     pipColor: '#00ff00',
-    tableFinish: 'plain',
     tableBounce: 0.9,
     specialPips: { enabled: false, values: [6], color: '#0000ff' },
   };
 
-  it('opens with ivory dice with dark pips (red on the 1 and 4) on green felt and no scaling', () => {
+  it('opens with ivory dice with dark pips (red on the 1 and 4) on green felt', () => {
     expect(createDiceController(createTestEnv()).getState().appearance).toEqual({
-      background: { kind: 'solid', color: '#2e6b4f', imageUrl: '' },
+      background: { kind: 'felt', color: '#2e6b4f', imageUrl: '' },
       fontFamily: '',
       fontSize: 48,
       textColor: '#222222',
-      scale: 1,
       showResultText: true,
       diceSize: 1,
       dieColor: '#f7f3e8',
       pipColor: '#1f1f1f',
-      tableFinish: 'felt',
       tableBounce: 0.6,
       specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
     });
   });
 
-  it('opens on a felt table', () => {
-    expect(diceBackdrop(createDiceController(createTestEnv()).getState().appearance)).toBe('felt');
-  });
-
-  it.each(DICE_BACKDROPS)('offers a %s backdrop, keeping the colors', (backdrop) => {
-    const next = withDiceBackdrop(custom, backdrop);
-    expect(diceBackdrop(next)).toBe(backdrop);
-    expect(next.background.color).toBe(custom.background.color);
-  });
-
-  it('shows the solid page background with no table for a solid backdrop', () => {
-    const solid = withDiceBackdrop(custom, 'solid');
-    expect(solid.background.kind).toBe('solid');
-    expect(solid.tableFinish).toBe('plain');
-  });
-
-  it.each(['transparent', 'image'] as const)('goes back to the same table after a %s backdrop', (backdrop) => {
-    const felt = withDiceBackdrop(custom, 'felt');
-    expect(diceBackdrop(withDiceBackdrop(withDiceBackdrop(felt, backdrop), 'solid'))).toBe('solid');
-    expect(withDiceBackdrop(felt, backdrop).tableFinish).toBe('felt');
-  });
-
-  it.each(TABLE_FINISHES)('offers a %s table finish', (tableFinish) => {
+  it.each(DICE_BACKDROPS)('offers a %s backdrop, keeping the colors', (kind) => {
     const dice = createDiceController(createTestEnv());
-    dice.setAppearance({ ...custom, tableFinish });
-    expect(dice.getState().appearance.tableFinish).toBe(tableFinish);
+    dice.setAppearance({ ...custom, background: { ...custom.background, kind } });
+    expect(dice.getState().appearance.background).toEqual({ ...custom.background, kind });
   });
 
   it('applies a new appearance and notifies subscribers', () => {
@@ -646,8 +589,6 @@ describe('dice appearance Settings', () => {
     ['a font size below the minimum', { fontSize: 2 }],
     ['a font size that is not a number', { fontSize: '20px' }],
     ['a text color that is not #rrggbb', { textColor: 'white' }],
-    ['a scale above the maximum', { scale: 10 }],
-    ['a scale of zero', { scale: 0 }],
     ['an overlong font family', { fontFamily: 'x'.repeat(201) }],
     ['a result text size below 20', { fontSize: 19 }],
     ['a non-boolean show result text', { showResultText: 'yes' }],
@@ -655,7 +596,6 @@ describe('dice appearance Settings', () => {
     ['a dice size below the minimum', { diceSize: 0.4 }],
     ['a die color that is not #rrggbb', { dieColor: '#fff' }],
     ['a missing pip color', { pipColor: undefined }],
-    ['an unknown table finish', { tableFinish: 'glass' }],
     ['a table bounce above the maximum', { tableBounce: 1.55 }],
     ['a negative table bounce', { tableBounce: -0.1 }],
     ['a table bounce that is not a number', { tableBounce: '0.5' }],
@@ -679,28 +619,10 @@ describe('dice appearance Settings', () => {
     expect(dice.getState().appearance).toEqual(transparent);
   });
 
-  it('gives Settings saved before appearance existed the default appearance', () => {
-    const env = createTestEnv();
-    env.storage.setItem(
-      settingsStorageKey('dice'),
-      JSON.stringify({
-        version: 1,
-        selectedPresetId: '1',
-        presets: [{ id: '1', name: 'Old', settings: { diceSet: { groups: [{ sides: 20, count: 2 }], modifier: 1 } } }],
-      }),
-    );
-
-    const { diceSet, appearance } = createDiceController(env).getState();
-    expect(diceSet).toEqual({ groups: [{ sides: 20, count: 2 }], modifier: 1 });
-    expect(appearance).toEqual(createDiceController(createTestEnv()).getState().appearance);
-  });
-
-  it('fills appearance items added later from defaults, keeping the stored ones', () => {
+  it('fills missing appearance items from defaults, keeping the stored ones', () => {
     const env = createTestEnv();
     const partial: Partial<DiceAppearance> = { ...custom };
-    delete partial.scale;
     delete partial.pipColor;
-    delete partial.tableFinish;
     delete partial.tableBounce;
     delete partial.specialPips;
     env.storage.setItem(
@@ -714,9 +636,7 @@ describe('dice appearance Settings', () => {
 
     expect(createDiceController(env).getState().appearance).toEqual({
       ...custom,
-      scale: 1,
       pipColor: '#1f1f1f',
-      tableFinish: 'felt',
       tableBounce: 0.6,
       specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
     });
@@ -730,13 +650,13 @@ describe('dice appearance Settings', () => {
     const viewer = createDiceController(viewerEnv);
     expect(viewer.getState().appearance).toEqual(custom);
     expect(viewer.getState().selectedPresetId).toBeNull();
-    viewer.setAppearance({ ...custom, scale: 2 });
+    viewer.setAppearance({ ...custom, diceSize: 2 });
     expect(viewerEnv.storage.getItem(settingsStorageKey('dice'))).toBeNull();
   });
 
   it('falls back to the stored appearance when a Share link carries an invalid one', () => {
     const page = new URL('https://example.test/dice/');
-    const invalid = { version: 1, settings: { appearance: { ...custom, scale: 99 } } };
+    const invalid = { version: 1, settings: { appearance: { ...custom, diceSize: 99 } } };
     const env = { ...createTestEnv(), url: new URL(createShareLink(page, invalid)) };
     createDiceController({ ...env, url: page }).setAppearance(custom);
 
@@ -812,29 +732,6 @@ describe('dice Share link', () => {
     const reloaded = createDiceController({ ...env, url: new URL(page) });
     expect(reloaded.getState().presets.map((preset) => preset.name)).toEqual(['', 'From stream']);
     expect(reloaded.getState().diceSet.groups).toEqual([{ sides: 20, count: 1 }]);
-  });
-
-  it('still opens a Share link created by this version of the site', () => {
-    // Frozen copy of a v1 Share link for 2d6 + 1d20 + 3: must keep opening after future changes.
-    const link =
-      `${page}?s=eyJ2ZXJzaW9uIjoxLCJzZXR0aW5ncyI6eyJkaWNlU2V0Ijp7Imdyb3VwcyI6W3sic2lkZXMiOjYsImNvdW50IjoyfSx7InNpZGVzIjoyMCwiY291bnQiOjF9XSwibW9kaWZpZXIiOjN9fX0` +
-      '&display=1&lang=en';
-    expect(createDiceController(createTestEnv({ url: link })).getState().diceSet).toEqual({
-      groups: [
-        { sides: 6, count: 2 },
-        { sides: 20, count: 1 },
-      ],
-      modifier: 3,
-    });
-    // Links from before the animation settings existed open with the default animation.
-    expect(createDiceController(createTestEnv({ url: link })).getState()).toMatchObject({
-      skipAnimation: false,
-      alwaysFullAnimation: false,
-    });
-    // ...and links from before the table existed with the default table.
-    expect(createDiceController(createTestEnv({ url: link })).getState().appearance).toMatchObject({
-      tableFinish: 'felt',
-    });
   });
 
   it('falls back to stored Settings when the Share link is damaged', () => {

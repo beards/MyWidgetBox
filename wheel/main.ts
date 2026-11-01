@@ -77,6 +77,7 @@ const appearancePanel = mountAppearancePanel<WheelAppearance>($('#appearance'), 
   fontSize: false,
   // Every text on the wheel follows the wheel's own text color instead.
   textColor: false,
+  scale: true,
   onChange(appearance) {
     wheel.setAppearance(appearance);
     appearancePanel.update(wheel.getState().appearance);
