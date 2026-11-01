@@ -47,12 +47,12 @@ export function createFallbackDiceScene(container: HTMLElement): DiceScene {
         animation === 'reduced' ? REDUCED_MOTION_DURATION : FULL_REVEAL,
       );
     },
+    setDiceSize(size: number) {
+      tray.style.zoom = String(size);
+    },
     setColors({ body, label }: DiceColors) {
       tray.style.setProperty('--die-body', body);
       tray.style.setProperty('--die-label', label);
-    },
-    setTable() {
-      // No table without WebGL: the tiles sit on the page background.
     },
   };
 }

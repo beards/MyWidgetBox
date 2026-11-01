@@ -8,10 +8,14 @@ import {
   type DiceAppearance,
   type DiceController,
   type DieSides,
+  DICE_BACKDROPS,
   TABLE_FINISHES,
   animationFor,
+  diceBackdrop,
+  withDiceBackdrop,
   createDiceController,
   formatOutcome,
+  outcomeTerms,
 } from './controller';
 
 describe('dice controller', () => {
@@ -168,6 +172,15 @@ describe('dice controller', () => {
     expect(formatOutcome({ rolls: [{ sides: 20, value: 12 }], modifier: 5, total: 17 })).toBe('17 = 12 + 5');
     expect(formatOutcome({ rolls: [{ sides: 6, value: 1 }], modifier: -3, total: -2 })).toBe('-2 = 1 - 3');
     expect(formatOutcome({ rolls: [{ sides: 6, value: 4 }], modifier: 0, total: 4 })).toBe('4');
+  });
+
+  it('gives the terms of a sum for the result text, and none for a lone die', () => {
+    const rolls = [
+      { sides: 6, value: 6 },
+      { sides: 6, value: 3 },
+    ] as const;
+    expect(outcomeTerms({ rolls: [...rolls], modifier: -2, total: 7 })).toBe('6 + 3 - 2');
+    expect(outcomeTerms({ rolls: [{ sides: 6, value: 4 }], modifier: 0, total: 4 })).toBeNull();
   });
 
   it('is animating after a roll until the view reports the animation finished', () => {
@@ -541,28 +554,52 @@ describe('dice appearance Settings', () => {
     fontSize: 32,
     textColor: '#eeeeee',
     scale: 1.5,
+    showResultText: false,
+    diceSize: 1.5,
     dieColor: '#ff0000',
     pipColor: '#00ff00',
-    tableColor: '#5a3a20',
-    tableFinish: 'wood',
+    tableFinish: 'plain',
     tableBounce: 0.9,
     specialPips: { enabled: false, values: [6], color: '#0000ff' },
   };
 
-  it('opens with a solid white background, ivory dice with dark pips (red on the 1 and 4) on a green felt table and no scaling', () => {
+  it('opens with ivory dice with dark pips (red on the 1 and 4) on green felt and no scaling', () => {
     expect(createDiceController(createTestEnv()).getState().appearance).toEqual({
-      background: { kind: 'solid', color: '#ffffff', imageUrl: '' },
+      background: { kind: 'solid', color: '#2e6b4f', imageUrl: '' },
       fontFamily: '',
-      fontSize: 20,
+      fontSize: 48,
       textColor: '#222222',
       scale: 1,
+      showResultText: true,
+      diceSize: 1,
       dieColor: '#f7f3e8',
       pipColor: '#1f1f1f',
-      tableColor: '#2e6b4f',
       tableFinish: 'felt',
       tableBounce: 0.6,
       specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
     });
+  });
+
+  it('opens on a felt table', () => {
+    expect(diceBackdrop(createDiceController(createTestEnv()).getState().appearance)).toBe('felt');
+  });
+
+  it.each(DICE_BACKDROPS)('offers a %s backdrop, keeping the colors', (backdrop) => {
+    const next = withDiceBackdrop(custom, backdrop);
+    expect(diceBackdrop(next)).toBe(backdrop);
+    expect(next.background.color).toBe(custom.background.color);
+  });
+
+  it('shows the solid page background with no table for a solid backdrop', () => {
+    const solid = withDiceBackdrop(custom, 'solid');
+    expect(solid.background.kind).toBe('solid');
+    expect(solid.tableFinish).toBe('plain');
+  });
+
+  it.each(['transparent', 'image'] as const)('goes back to the same table after a %s backdrop', (backdrop) => {
+    const felt = withDiceBackdrop(custom, 'felt');
+    expect(diceBackdrop(withDiceBackdrop(withDiceBackdrop(felt, backdrop), 'solid'))).toBe('solid');
+    expect(withDiceBackdrop(felt, backdrop).tableFinish).toBe('felt');
   });
 
   it.each(TABLE_FINISHES)('offers a %s table finish', (tableFinish) => {
@@ -612,9 +649,12 @@ describe('dice appearance Settings', () => {
     ['a scale above the maximum', { scale: 10 }],
     ['a scale of zero', { scale: 0 }],
     ['an overlong font family', { fontFamily: 'x'.repeat(201) }],
+    ['a result text size below 20', { fontSize: 19 }],
+    ['a non-boolean show result text', { showResultText: 'yes' }],
+    ['a dice size above the maximum', { diceSize: 2.5 }],
+    ['a dice size below the minimum', { diceSize: 0.4 }],
     ['a die color that is not #rrggbb', { dieColor: '#fff' }],
     ['a missing pip color', { pipColor: undefined }],
-    ['a table color that is not #rrggbb', { tableColor: 'green' }],
     ['an unknown table finish', { tableFinish: 'glass' }],
     ['a table bounce above the maximum', { tableBounce: 1.55 }],
     ['a negative table bounce', { tableBounce: -0.1 }],
@@ -660,7 +700,6 @@ describe('dice appearance Settings', () => {
     const partial: Partial<DiceAppearance> = { ...custom };
     delete partial.scale;
     delete partial.pipColor;
-    delete partial.tableColor;
     delete partial.tableFinish;
     delete partial.tableBounce;
     delete partial.specialPips;
@@ -677,7 +716,6 @@ describe('dice appearance Settings', () => {
       ...custom,
       scale: 1,
       pipColor: '#1f1f1f',
-      tableColor: '#2e6b4f',
       tableFinish: 'felt',
       tableBounce: 0.6,
       specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
@@ -795,7 +833,6 @@ describe('dice Share link', () => {
     });
     // ...and links from before the table existed with the default table.
     expect(createDiceController(createTestEnv({ url: link })).getState().appearance).toMatchObject({
-      tableColor: '#2e6b4f',
       tableFinish: 'felt',
     });
   });

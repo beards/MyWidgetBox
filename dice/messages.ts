@@ -45,19 +45,22 @@ export type DiceMessageKey =
   | 'home'
   | 'dieColor'
   | 'pipColor'
-  | 'tableColor'
-  | 'tableFinish'
+  | 'diceSize'
+  | 'showResultText'
   | 'tableBounce'
   | 'specialPips'
   | 'specialPipsFaces'
   | 'specialPipsColor'
-  | 'finishFelt'
-  | 'finishWood'
-  | 'finishPlain';
+  | 'finishFelt';
 
 export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
   en: {
     ...appearanceMessages.en,
+    // The shared text items style the result text only.
+    fontFamily: 'Result text font',
+    fontSize: 'Result text size',
+    textColor: 'Result text color',
+    showResultText: 'Show the result text',
     title: 'Dice · MyWidgetBox',
     roll: 'Roll',
     reset: 'Reset',
@@ -101,18 +104,20 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     home: '← All widgets',
     dieColor: 'Die color',
     pipColor: 'Pip color',
-    tableColor: 'Table color',
-    tableFinish: 'Table surface',
+    diceSize: 'Dice size',
     tableBounce: 'Table bounce',
     specialPips: 'Color some d6 pips differently',
     specialPipsFaces: 'Faces',
     specialPipsColor: 'Their color',
     finishFelt: 'Felt',
-    finishWood: 'Wood',
-    finishPlain: 'Plain',
   },
   'zh-Hant': {
     ...appearanceMessages['zh-Hant'],
+    // The shared text items style the result text only.
+    fontFamily: '結果文字字型',
+    fontSize: '結果文字大小',
+    textColor: '結果文字顏色',
+    showResultText: '顯示結果文字',
     title: '骰子 · MyWidgetBox',
     roll: '擲骰',
     reset: '重置',
@@ -156,14 +161,11 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     home: '← 所有工具',
     dieColor: '骰子顏色',
     pipColor: '點數顏色',
-    tableColor: '桌面顏色',
-    tableFinish: '桌面質感',
+    diceSize: '骰子大小',
     tableBounce: '桌面彈性',
     specialPips: '特殊點數塗色',
     specialPipsFaces: '點數',
     specialPipsColor: '塗色',
     finishFelt: '絨布',
-    finishWood: '木紋',
-    finishPlain: '素面',
   },
 };

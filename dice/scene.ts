@@ -15,7 +15,6 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   Quaternion,
-  RepeatWrapping,
   SRGBColorSpace,
   Scene,
   SpotLight,
@@ -26,7 +25,7 @@ import {
 } from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { REDUCED_MOTION_DURATION } from '../shared/animation';
-import type { DiceAnimation, DieRoll, TableFinish } from './controller';
+import type { DiceAnimation, DieRoll } from './controller';
 import { type DieBody, type DieFace, type DieShape, bodiesFor, createDieGeometry, dieShape, restingQuaternion } from './geometry';
 import { type Arena, type ImpactSound, type StagedRoll, arenaFor, impactSounds, stageRoll } from './physics';
 
@@ -46,8 +45,8 @@ export interface DiceScene {
   ): void;
   /** Recolors the dice (also mid-animation); a no-op if the colors are unchanged. */
   setColors(colors: DiceColors): void;
-  /** Changes the table; an invisible table (transparent background) still catches the dice shadows. */
-  setTable(table: TableLook): void;
+  /** How big the dice look (the dice size setting), from the next throw; dice at rest are set down again at once. */
+  setDiceSize(size: number): void;
 }
 
 /** CSS colors of the die body and of the pips / face numbers. */
@@ -58,26 +57,20 @@ export interface DiceColors {
   specialPips: { values: number[]; color: string } | null;
 }
 
-export interface TableLook {
-  color: string;
-  finish: TableFinish;
-  visible: boolean;
-}
-
 const DEFAULT_COLORS: DiceColors = { body: '#f7f3e8', label: '#1f1f1f', specialPips: { values: [1, 4], color: '#c62828' } };
 const FIELD_OF_VIEW = 32;
 /** The camera looks down at the table from this many degrees above it. */
 const ELEVATION = (55 * Math.PI) / 180;
 /** Above this many die bodies the physics would take too long: the dice are just set down, as with reduced motion. */
 const PHYSICS_BODY_LIMIT = 80;
+/** Distance between the centres of dice set down without a throw, when there is room. */
+const SET_DOWN_SPACING = 2.6;
 /** How long the top faces light up once the dice rest, and in what color. */
 const HIGHLIGHT_MS = 1400;
 const HIGHLIGHT_COLOR = '#ffc94a';
 const HIGHLIGHT_STRENGTH = 1.2;
 /** Colors that paint a face's label mask: labels white, the rest black. */
 const MASK_COLORS: DiceColors = { body: '#000000', label: '#ffffff', specialPips: null };
-/** Table texture tile size in world units (a die is about 2 across). */
-const TILE = { felt: 6, wood: 14 } as const;
 
 interface Model {
   sides: number;
@@ -126,9 +119,9 @@ export function createDiceScene(container: HTMLElement): DiceScene {
   const fill = new DirectionalLight(0xdde6ff, 0.5);
   scene.add(lamp, lamp.target, fill);
 
-  const tableMaterial = new MeshStandardMaterial();
-  const shadowCatcher = new ShadowMaterial({ opacity: 0.35 });
-  const table = new Mesh<PlaneGeometry, Material>(new PlaneGeometry(400, 400), tableMaterial);
+  // The table itself is not drawn: the page background (color, image or felt) shows through, and this
+  // invisible plane only catches the dice shadows.
+  const table = new Mesh(new PlaneGeometry(400, 400), new ShadowMaterial({ opacity: 0.35 }));
   table.rotation.x = -Math.PI / 2;
   table.receiveShadow = true;
   scene.add(table);
@@ -141,7 +134,7 @@ export function createDiceScene(container: HTMLElement): DiceScene {
   /** True while dice are falling and rolling (not during the top-face highlight after they rest). */
   let rolling = false;
   let colors = DEFAULT_COLORS;
-  let tableKey = '';
+  let diceSize = 1;
 
   /** One material per face, then one for the rounded edges and corners (see createDieGeometry). */
   function faceMaterials(shape: DieShape): Material[] {
@@ -167,7 +160,7 @@ export function createDiceScene(container: HTMLElement): DiceScene {
   function place(bodies: DieBody[]) {
     placed.forEach(({ mesh }) => scene.remove(mesh));
     clearHighlights();
-    arena = arenaFor(bodies.length, aspect());
+    arena = arenaFor(bodies.length, aspect(), diceSize);
     placed = bodies.map((body) => {
       const { shape, geometry, materials, labelMasks } = model(body);
       const mesh = new Mesh(geometry, materials);
@@ -179,11 +172,20 @@ export function createDiceScene(container: HTMLElement): DiceScene {
     fitCamera();
   }
 
-  /** Sets the dice down in rows on the table, each with its value on top. */
+  /**
+   * Sets the dice down in rows on the table, each with its value on top: as few rows as fit, with the
+   * spacing tightened when the walled area is small (big-looking dice) so they all stay in view.
+   */
   function setDown() {
-    const cell = 2.6;
-    const cols = Math.max(1, Math.min(placed.length, Math.floor((2 * arena.halfWidth) / cell)));
-    const rows = Math.ceil(placed.length / cols);
+    const count = placed.length;
+    const spacing = (columns: number) =>
+      Math.min(SET_DOWN_SPACING, (2 * arena.halfWidth) / columns, (2 * arena.halfDepth) / Math.ceil(count / columns));
+    let cols = Math.max(1, count);
+    for (let candidate = count; candidate >= 1; candidate--) {
+      if (spacing(candidate) > spacing(cols) + 1e-9) cols = candidate;
+    }
+    const cell = spacing(cols);
+    const rows = Math.ceil(count / cols);
     placed.forEach(({ mesh, body, shape }, index) => {
       const reading = shape.readings.findIndex((candidate) => candidate.label === body.label);
       const orientation = restingQuaternion(shape, reading);
@@ -402,6 +404,19 @@ export function createDiceScene(container: HTMLElement): DiceScene {
       replay(stageRoll(rolls, { random: Math.random, arena, bounce }), onDone, onImpact);
     },
 
+    setDiceSize(size) {
+      if (size === diceSize) return;
+      diceSize = size;
+      if (rolling || placed.length === 0) return;
+      cancelAnimationFrame(frame);
+      frame = 0;
+      clearHighlights();
+      arena = arenaFor(placed.length, aspect(), diceSize);
+      fitCamera();
+      setDown();
+      render();
+    },
+
     setColors(next) {
       if (JSON.stringify(next) === JSON.stringify(colors)) return;
       colors = next;
@@ -413,23 +428,6 @@ export function createDiceScene(container: HTMLElement): DiceScene {
           material.dispose();
         }
         found.materials.splice(0, found.materials.length, ...faceMaterials(found.shape));
-      }
-      render();
-    },
-
-    setTable({ color, finish, visible }) {
-      const key = `${color}:${finish}:${visible}`;
-      if (key === tableKey) return;
-      tableKey = key;
-      if (!visible) {
-        table.material = shadowCatcher;
-      } else {
-        tableMaterial.map?.dispose();
-        tableMaterial.map = finish === 'plain' ? null : tableTexture(finish);
-        tableMaterial.color.set(color);
-        tableMaterial.roughness = finish === 'felt' ? 0.95 : finish === 'wood' ? 0.62 : 0.75;
-        tableMaterial.needsUpdate = true;
-        table.material = tableMaterial;
       }
       render();
     },
@@ -532,71 +530,3 @@ function drawPips(context: CanvasRenderingContext2D, value: number, halfSide: nu
   }
 }
 
-/** A grey tileable surface pattern, tinted by the table color: felt fibres or wood planks. */
-function tableTexture(finish: 'felt' | 'wood'): CanvasTexture {
-  const size = 512;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const context = canvas.getContext('2d')!;
-  const image = context.createImageData(size, size);
-  const { data } = image;
-  // A small fixed-seed noise so the pattern is the same on every load.
-  let seed = 12345;
-  const noise = () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    return seed / 0x7fffffff;
-  };
-  const plank = size / 4;
-  // Smooth wrapping 1D noise (cosine-interpolated random points), so the grain meanders and the tile repeats seamlessly.
-  const curve = (count: number) => Array.from({ length: count }, noise);
-  const smooth = (points: number[], t: number) => {
-    const i = Math.floor(t);
-    const a = points[i % points.length]!;
-    const b = points[(i + 1) % points.length]!;
-    return a + (b - a) * ((1 - Math.cos((t - i) * Math.PI)) / 2);
-  };
-  const planks = Array.from({ length: 4 }, () => ({ bend: curve(6), ripple: curve(18), shade: 0.9 + noise() * 0.15 }));
-  const streaks = curve(size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      let value: number;
-      if (finish === 'felt') {
-        value = 0.86 + noise() * 0.14;
-      } else {
-        const row = Math.floor(y / plank);
-        const { bend, ripple, shade } = planks[row]!;
-        const u = x / size;
-        const v = (y % plank) / plank;
-        const warp = smooth(bend, u * 6) * 1.6 + smooth(ripple, u * 18) * 0.25;
-        // Long grain lines that meander along the plank, fine streaks, and a dark seam between planks.
-        const grain = Math.sin((v * 5 + warp) * Math.PI * 2);
-        value = shade * (0.8 + grain * 0.06 + Math.sin((v * 23 + warp * 2) * Math.PI * 2) * 0.025 + (streaks[y]! - 0.5) * 0.08 + noise() * 0.03);
-        if (v < 0.012 || v > 0.988) value *= 0.5;
-      }
-      const index = (y * size + x) * 4;
-      data[index] = data[index + 1] = data[index + 2] = Math.max(0, Math.min(255, value * 255));
-      data[index + 3] = 255;
-    }
-  }
-  context.putImageData(image, 0, 0);
-  if (finish === 'felt') {
-    // Short fibres for a cloth look.
-    context.globalAlpha = 0.08;
-    for (let i = 0; i < 4000; i++) {
-      context.strokeStyle = noise() < 0.5 ? '#000' : '#fff';
-      const x = noise() * size;
-      const y = noise() * size;
-      const angle = noise() * Math.PI;
-      context.beginPath();
-      context.moveTo(x, y);
-      context.lineTo(x + Math.cos(angle) * 6, y + Math.sin(angle) * 6);
-      context.stroke();
-    }
-  }
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
-  texture.wrapS = texture.wrapT = RepeatWrapping;
-  texture.repeat.set(400 / TILE[finish], 400 / TILE[finish]);
-  texture.anisotropy = 8;
-  return texture;
-}

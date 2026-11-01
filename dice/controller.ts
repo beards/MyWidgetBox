@@ -40,12 +40,15 @@ export interface DiceOutcome {
 
 /** The shared appearance baseline plus the dice's own items (also used by the 3D view). */
 export interface DiceAppearance extends Appearance {
+  /** Whether the result text (total and breakdown) shows over the dice. */
+  showResultText: boolean;
+  /** How big the dice look, as a factor of the normal size (DICE_SIZE_RANGE). */
+  diceSize: number;
   /** `#rrggbb` color of the die body. */
   dieColor: string;
   /** `#rrggbb` color of the pips / face numbers. */
   pipColor: string;
-  /** `#rrggbb` color of the table the dice are thrown onto (hidden with a transparent background). */
-  tableColor: string;
+  /** The table under the dice; 'plain' is none, the dice land on the solid page background. See diceBackdrop. */
   tableFinish: TableFinish;
   /** How bouncy the table is, 0 (dead) .. TABLE_BOUNCE_MAX; only changes how the roll is staged. */
   tableBounce: number;
@@ -94,10 +97,33 @@ function isDiceAnimationSettings(value: unknown): value is DiceAnimationSettings
  * bounce higher and higher until the wind-down damping stops them.
  */
 export const TABLE_BOUNCE_MAX = 1.5;
+export const DICE_SIZE_RANGE = { min: 0.5, max: 2 } as const;
+/** The result text size range (px): narrower than the shared FONT_SIZE_RANGE. */
+export const RESULT_TEXT_SIZE_RANGE = { min: 20, max: 160 } as const;
 
-/** Surface textures of the table, tinted with tableColor. */
-export const TABLE_FINISHES = ['felt', 'wood', 'plain'] as const;
+/** Whether the dice land on felt (in the background color) or on the plain background color. */
+export const TABLE_FINISHES = ['felt', 'plain'] as const;
 export type TableFinish = (typeof TABLE_FINISHES)[number];
+
+/**
+ * What the dice are thrown onto, the one "background" choice the dice offer: felt (the default, listed
+ * first), a solid color, nothing (transparent, for overlays) or an image. Stored as the shared background
+ * kind plus tableFinish; felt and solid share the background color.
+ */
+export const DICE_BACKDROPS = ['felt', 'solid', 'transparent', 'image'] as const;
+export type DiceBackdrop = (typeof DICE_BACKDROPS)[number];
+
+export function diceBackdrop({ background, tableFinish }: DiceAppearance): DiceBackdrop {
+  if (background.kind !== 'solid') return background.kind;
+  return tableFinish === 'plain' ? 'solid' : tableFinish;
+}
+
+export function withDiceBackdrop(appearance: DiceAppearance, backdrop: DiceBackdrop): DiceAppearance {
+  const kind = backdrop === 'transparent' || backdrop === 'image' ? backdrop : 'solid';
+  // A transparent or image backdrop shows no table, but keeps the table choice to come back to.
+  const tableFinish = backdrop === 'solid' ? 'plain' : backdrop === 'felt' ? 'felt' : appearance.tableFinish;
+  return { ...appearance, background: { ...appearance.background, kind }, tableFinish };
+}
 
 /** What the dice remember and share; one value per Preset. Add new fields with defaults here. */
 export interface DiceSettings {
@@ -187,9 +213,13 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
     shakeToRoll: false,
     appearance: {
       ...appearanceDefaults,
+      // Felt in this green by default; the same color is used for a solid background.
+      background: { ...appearanceDefaults.background, color: '#2e6b4f' },
+      fontSize: 48,
+      showResultText: true,
+      diceSize: 1,
       dieColor: '#f7f3e8',
       pipColor: '#1f1f1f',
-      tableColor: '#2e6b4f',
       tableFinish: 'felt',
       tableBounce: 0.6,
       specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
@@ -204,12 +234,16 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
 };
 
 function isDiceAppearance(value: unknown): value is DiceAppearance {
-  const { dieColor, pipColor, tableColor, tableFinish, tableBounce, specialPips } = (value ?? {}) as Partial<DiceAppearance>;
+  const { fontSize, showResultText, diceSize, dieColor, pipColor, tableFinish, tableBounce, specialPips } = (value ?? {}) as Partial<DiceAppearance>;
   return (
     isAppearance(value) &&
+    (fontSize ?? 0) >= RESULT_TEXT_SIZE_RANGE.min &&
+    typeof showResultText === 'boolean' &&
+    typeof diceSize === 'number' &&
+    diceSize >= DICE_SIZE_RANGE.min &&
+    diceSize <= DICE_SIZE_RANGE.max &&
     isHexColor(dieColor) &&
     isHexColor(pipColor) &&
-    isHexColor(tableColor) &&
     TABLE_FINISHES.includes(tableFinish as TableFinish) &&
     typeof tableBounce === 'number' &&
     tableBounce >= 0 &&
@@ -378,9 +412,15 @@ export function createDiceController(
 
 
 /** Total and breakdown, e.g. `17 = 12 + 3 + 2`; just the total when there is nothing to break down. */
-export function formatOutcome({ rolls, modifier, total }: DiceOutcome): string {
+export function formatOutcome(outcome: DiceOutcome): string {
+  const terms = outcomeTerms(outcome);
+  return terms ? `${outcome.total} = ${terms}` : String(outcome.total);
+}
+
+/** The sum that makes up the total, e.g. "6 + 3 + 1 - 2"; null for a single die without a modifier. */
+export function outcomeTerms({ rolls, modifier }: DiceOutcome): string | null {
   const [first, ...rest] = rolls.map((roll) => roll.value);
   const terms = [String(first), ...rest.map((value) => `+ ${value}`)];
   if (modifier !== 0) terms.push(`${modifier > 0 ? '+' : '-'} ${Math.abs(modifier)}`);
-  return terms.length === 1 ? String(total) : `${total} = ${terms.join(' ')}`;
+  return terms.length === 1 ? null : terms.join(' ');
 }

@@ -10,19 +10,25 @@ import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundIn
 import {
   DIE_SIDES,
   MAX_DICE_PER_KIND,
-  TABLE_FINISHES,
+  DICE_BACKDROPS,
+  DICE_SIZE_RANGE,
+  RESULT_TEXT_SIZE_RANGE,
   type DiceAppearance,
   type DiceOutcome,
   type DiceSet,
   type DiceState,
   type DieSides,
   type SpecialPips,
-  type TableFinish,
+  type DiceBackdrop,
   TABLE_BOUNCE_MAX,
   animationFor,
   createDiceController,
+  diceBackdrop,
+  withDiceBackdrop,
   formatOutcome,
+  outcomeTerms,
 } from './controller';
+import { clearFelt, paintFelt } from './felt';
 import { messages } from './messages';
 import { createFallbackDiceScene } from './fallback-scene';
 import { type DiceScene, createDiceScene } from './scene';
@@ -37,11 +43,18 @@ bindStaticText(i18n);
 mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
 const t = i18n.t;
 const dieLabel = (sides: number) => t('dieLabel', { sides });
-const FINISH_LABELS = { felt: 'finishFelt', wood: 'finishWood', plain: 'finishPlain' } as const;
+const BACKDROP_LABELS = {
+  solid: 'backgroundSolid',
+  transparent: 'backgroundTransparent',
+  image: 'backgroundImage',
+  felt: 'finishFelt',
+} as const;
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const die = $<HTMLButtonElement>('#die');
 const breakdown = $('#breakdown');
+/** The Outcome the result text shows (null: none), so it is rebuilt, and pops in, only when it changes. */
+let shownResult: DiceOutcome | null = null;
 const rollButton = $<HTMLButtonElement>('#roll');
 const groupList = $<HTMLUListElement>('#groups');
 const addSides = $<HTMLSelectElement>('#add-sides');
@@ -59,22 +72,29 @@ const sound = createSoundPlayer();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each roll starts its animation exactly once. */
 let playing: DiceOutcome | null = null;
-const display = $('#display');
 const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelector<HTMLElement>('#appearance')!, {
   i18n,
+  // The dice offer their own background choice (mountBackdrop), which includes the table.
+  background: false,
+  // The dice size slider (mountDiceSize) takes the place of the shared zoom.
+  scale: false,
+  fontSizeRange: RESULT_TEXT_SIZE_RANGE,
+  textColorQuickColors: true,
   fields: [
     { key: 'dieColor', label: () => t('dieColor') },
     { key: 'pipColor', label: () => t('pipColor') },
-    { key: 'tableColor', label: () => t('tableColor') },
   ],
   onChange(appearance) {
     dice.setAppearance(appearance);
     appearancePanel.update(dice.getState().appearance);
   },
 });
-const tableFinishInput = mountTableFinish(document.querySelector<HTMLElement>('#appearance')!);
+const backdropInputs = mountBackdrop(document.querySelector<HTMLElement>('#appearance h2')!);
 const tableBounce = mountTableBounce(document.querySelector<HTMLElement>('#appearance')!);
+const showResultText = mountShowResultText(document.querySelector<HTMLElement>('#appearance')!);
+const diceSize = mountDiceSize(document.querySelector<HTMLElement>('#appearance')!);
 const specialPipsInputs = mountSpecialPips(document.querySelector<HTMLElement>('#appearance')!);
+orderAppearanceRows(document.querySelector<HTMLElement>('#appearance')!);
 const presetPanel = mountPresetPanel(dice, i18n);
 const sharePanel = mountSharePanel(i18n, (options) => dice.shareLink(options));
 mountSettingsFilePanel(i18n, {
@@ -94,7 +114,12 @@ function renderAddSides() {
 
 function render(state: DiceState) {
   const { diceSet, appearance, outcome, history, animating } = state;
-  applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
+  // The text settings apply to the result text; the dice size is the scene's own (no CSS zoom, which blurs the 3D stage).
+  applyAppearance(appearance, { page: document.documentElement, display: breakdown }, { forceTransparent: displayOptions.transparent });
+  scene.setDiceSize(appearance.diceSize);
+  breakdown.hidden = !appearance.showResultText;
+  breakdown.style.setProperty('--result-outline', resultOutline(appearance.textColor));
+  showResultText.checked = appearance.showResultText;
   const { specialPips } = appearance;
   scene.setColors({
     body: appearance.dieColor,
@@ -103,12 +128,16 @@ function render(state: DiceState) {
   });
   // With a transparent background only the dice and their shadows show (e.g. over a stream in OBS).
   const transparent = displayOptions.transparent || appearance.background.kind === 'transparent';
-  scene.setTable({ color: appearance.tableColor, finish: appearance.tableFinish, visible: !transparent });
+  // The felt fills the whole page, so the dice area has no visible edge; the dice cast shadows on any background.
+  if (!transparent && diceBackdrop(appearance) === 'felt') paintFelt(document.documentElement, appearance.background.color);
+  else clearFelt(document.documentElement);
   appearancePanel.update(appearance);
-  tableFinishInput.value = appearance.tableFinish;
+  backdropInputs.update(appearance);
   if (document.activeElement !== tableBounce.input) tableBounce.input.value = String(appearance.tableBounce);
   tableBounce.value.textContent = formatBounce(appearance.tableBounce);
   specialPipsInputs.update(appearance.specialPips);
+  if (document.activeElement !== diceSize.input) diceSize.input.value = String(appearance.diceSize);
+  diceSize.value.textContent = formatDiceSize(appearance.diceSize);
 
   presetPanel.update(state);
 
@@ -129,7 +158,7 @@ function render(state: DiceState) {
     scene.show(outcome ? outcome.rolls : restingDice(diceSet));
   }
   // The Outcome is revealed once the dice have landed.
-  breakdown.textContent = outcome && !animating ? formatOutcome(outcome) : '';
+  showResult(outcome && !animating ? outcome : null);
   modifierInput.value = String(diceSet.modifier);
   skipInput.checked = state.skipAnimation;
   alwaysFullInput.checked = state.alwaysFullAnimation;
@@ -172,6 +201,80 @@ function render(state: DiceState) {
       return item;
     }),
   );
+}
+
+/** The result text: the total on the first line, and the sum making it up below it in smaller type. */
+function showResult(outcome: DiceOutcome | null) {
+  if (outcome === shownResult) return;
+  shownResult = outcome;
+  if (!outcome) {
+    breakdown.replaceChildren();
+    return;
+  }
+  const total = document.createElement('span');
+  total.className = 'dice__total';
+  total.textContent = String(outcome.total);
+  const terms = outcomeTerms(outcome);
+  const detail = document.createElement('span');
+  detail.className = 'dice__terms';
+  detail.textContent = terms ? `( ${terms} )` : '';
+  breakdown.replaceChildren(total, ...(terms ? [detail] : []));
+  // Pops in once per Outcome (the spans are only rebuilt when the Outcome changes).
+  breakdown.classList.remove('dice__breakdown--in');
+  void breakdown.offsetWidth;
+  breakdown.classList.add('dice__breakdown--in');
+}
+
+/**
+ * The outline around the result text: dark around light text, light around dark text, so it reads over
+ * the dice and any background.
+ */
+function resultOutline(textColor: string): string {
+  const [r, g, b] = [1, 3, 5].map((start) => parseInt(textColor.slice(start, start + 2), 16) / 255);
+  const luminance = 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  return luminance > 0.5 ? 'rgb(0 0 0 / 0.8)' : 'rgb(255 255 255 / 0.9)';
+}
+
+/** The "show the result text" checkbox, first of the result text items. */
+function mountShowResultText(container: HTMLElement): HTMLInputElement {
+  const label = document.createElement('label');
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  const text = document.createElement('span');
+  const relabel = () => (text.textContent = t('showResultText'));
+  relabel();
+  i18n.subscribe(relabel);
+  input.addEventListener('change', () =>
+    dice.setAppearance({ ...dice.getState().appearance, showResultText: input.checked }),
+  );
+  label.append(input, text);
+  label.dataset.appearanceRow = 'showResultText';
+  container.append(label);
+  return input;
+}
+
+/** The dice size slider (DICE_SIZE_RANGE), shown with its value as a percentage. */
+function mountDiceSize(container: HTMLElement): { input: HTMLInputElement; value: HTMLOutputElement } {
+  const label = document.createElement('label');
+  const text = document.createElement('span');
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.min = String(DICE_SIZE_RANGE.min);
+  input.max = String(DICE_SIZE_RANGE.max);
+  input.step = '0.05';
+  const value = document.createElement('output');
+  const relabel = () => (text.textContent = t('diceSize'));
+  relabel();
+  i18n.subscribe(relabel);
+  input.addEventListener('input', () => dice.setAppearance({ ...dice.getState().appearance, diceSize: Number(input.value) }));
+  label.append(text, input, value);
+  label.dataset.appearanceRow = 'diceSize';
+  container.append(label);
+  return { input, value };
+}
+
+function formatDiceSize(size: number): string {
+  return `${Math.round(size * 100)}%`;
 }
 
 /** The table bounce slider (0..TABLE_BOUNCE_MAX), added to the appearance panel after the table finish. */
@@ -221,6 +324,9 @@ function mountSpecialPips(container: HTMLElement): { update(specialPips: Special
     );
   }
   color.addEventListener('input', () => change({ color: color.value }));
+  enabledLabel.dataset.appearanceRow = 'specialPips';
+  facesRow.dataset.appearanceRow = 'specialPipsFaces';
+  colorLabel.dataset.appearanceRow = 'specialPipsColor';
   container.append(enabledLabel, facesRow, colorLabel);
 
   return {
@@ -253,6 +359,7 @@ function mountTableBounce(container: HTMLElement): { input: HTMLInputElement; va
     dice.setAppearance({ ...dice.getState().appearance, tableBounce: Number(input.value) }),
   );
   label.append(text, input, value);
+  label.dataset.appearanceRow = 'tableBounce';
   container.append(label);
   return { input, value };
 }
@@ -261,25 +368,88 @@ function formatBounce(bounce: number): string {
   return bounce.toFixed(2);
 }
 
-/** The table finish choice, added to the appearance panel after its color items. */
-function mountTableFinish(container: HTMLElement): HTMLSelectElement {
-  const label = document.createElement('label');
-  const text = document.createElement('span');
+/**
+ * The dice's background choice, placed right after the appearance heading: a solid color, transparent,
+ * an image, or felt: a color row for solid and felt, a URL row for an image.
+ */
+function mountBackdrop(heading: HTMLElement): { update(appearance: DiceAppearance): void } {
+  const row = (input: HTMLElement) => {
+    const label = document.createElement('label');
+    const text = document.createElement('span');
+    label.append(text, input);
+    return { label, text };
+  };
   const select = document.createElement('select');
+  const kind = row(select);
+  const backgroundColor = document.createElement('input');
+  backgroundColor.type = 'color';
+  const background = row(backgroundColor);
+  const imageUrl = document.createElement('input');
+  imageUrl.type = 'url';
+  imageUrl.placeholder = 'https://';
+  imageUrl.spellcheck = false;
+  const image = row(imageUrl);
+
   const relabel = () => {
-    text.textContent = t('tableFinish');
+    kind.text.textContent = t('background');
+    background.text.textContent = t('backgroundColor');
+    image.text.textContent = t('imageUrl');
     const selected = select.value;
-    select.replaceChildren(...TABLE_FINISHES.map((finish) => new Option(t(FINISH_LABELS[finish]), finish)));
-    select.value = selected || dice.getState().appearance.tableFinish;
+    select.replaceChildren(...DICE_BACKDROPS.map((backdrop) => new Option(t(BACKDROP_LABELS[backdrop]), backdrop)));
+    select.value = selected || diceBackdrop(dice.getState().appearance);
   };
   relabel();
   i18n.subscribe(relabel);
-  select.addEventListener('change', () =>
-    dice.setAppearance({ ...dice.getState().appearance, tableFinish: select.value as TableFinish }),
+
+  const appearance = () => dice.getState().appearance;
+  select.addEventListener('change', () => dice.setAppearance(withDiceBackdrop(appearance(), select.value as DiceBackdrop)));
+  backgroundColor.addEventListener('input', () =>
+    dice.setAppearance({ ...appearance(), background: { ...appearance().background, color: backgroundColor.value } }),
   );
-  label.append(text, select);
-  container.append(label);
-  return select;
+  // A non-http(s) URL is rejected by the controller; the field keeps what was typed until it is fixed.
+  imageUrl.addEventListener('input', () =>
+    dice.setAppearance({ ...appearance(), background: { ...appearance().background, imageUrl: imageUrl.value.trim() } }),
+  );
+  kind.label.dataset.appearanceRow = 'backdrop';
+  background.label.dataset.appearanceRow = 'backdropColor';
+  image.label.dataset.appearanceRow = 'backdropImageUrl';
+  heading.after(kind.label, background.label, image.label);
+
+  return {
+    update(next) {
+      const backdrop = diceBackdrop(next);
+      select.value = backdrop;
+      backgroundColor.value = next.background.color;
+      if (document.activeElement !== imageUrl) imageUrl.value = next.background.imageUrl;
+      background.label.hidden = backdrop !== 'solid' && backdrop !== 'felt';
+      image.label.hidden = backdrop !== 'image';
+    },
+  };
+}
+
+/**
+ * Puts the appearance rows in their reading order: the dice themselves first, then the result text,
+ * then the background (with the table bounce, which belongs to the surface).
+ */
+function orderAppearanceRows(container: HTMLElement) {
+  const order = [
+    'diceSize',
+    'dieColor',
+    'pipColor',
+    'specialPips',
+    'specialPipsFaces',
+    'specialPipsColor',
+    'showResultText',
+    'fontFamily',
+    'fontSize',
+    'textColor',
+    'backdrop',
+    'backdropColor',
+    'backdropImageUrl',
+    'tableBounce',
+  ];
+  const rows = order.map((name) => container.querySelector<HTMLElement>(`[data-appearance-row="${name}"]`)!);
+  container.append(...rows);
 }
 
 /** three.js throws when no WebGL context can be created; the dice then roll as flat tiles. */

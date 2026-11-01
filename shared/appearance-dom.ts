@@ -65,6 +65,14 @@ export interface AppearancePanelOptions<A extends Appearance> {
   fontSize?: boolean;
   /** False for a Widget whose display has no text the shared text color would color. */
   textColor?: boolean;
+  /** False for a Widget that offers its own background choice (placed right after the heading). */
+  background?: boolean;
+  /** False for a Widget that sizes its display another way. */
+  scale?: boolean;
+  /** Narrower text size slider range than FONT_SIZE_RANGE (the Widget validates it too). */
+  fontSizeRange?: { min: number; max: number };
+  /** Adds one-click white and black buttons beside the text color picker. */
+  textColorQuickColors?: boolean;
   /** Called with the whole next appearance on every edit (live preview); the caller validates. */
   onChange(appearance: A): void;
 }
@@ -93,7 +101,17 @@ const BACKGROUND_LABELS: Record<BackgroundKind, AppearanceMessageKey> = {
 /** Builds the appearance form inside container. Text follows the i18n locale. */
 export function mountAppearancePanel<A extends Appearance>(
   container: HTMLElement,
-  { i18n, fields = [], fontSize: showFontSize = true, textColor: showTextColor = true, onChange }: AppearancePanelOptions<A>,
+  {
+    i18n,
+    fields = [],
+    fontSize: showFontSize = true,
+    textColor: showTextColor = true,
+    background: showBackground = true,
+    scale: showScale = true,
+    fontSizeRange = FONT_SIZE_RANGE,
+    textColorQuickColors = false,
+    onChange,
+  }: AppearancePanelOptions<A>,
 ): AppearancePanel<A> {
   const { t } = i18n;
   let current: A | null = null;
@@ -102,8 +120,10 @@ export function mountAppearancePanel<A extends Appearance>(
   const syncs: (() => void)[] = [];
   const relabels: (() => void)[] = [];
 
-  function row(label: () => string, input: HTMLElement, ...extra: HTMLElement[]) {
+  /** One labelled row; `name` (data-appearance-row) lets a Widget find it, e.g. to reorder the rows. */
+  function row(name: string, label: () => string, input: HTMLElement, ...extra: HTMLElement[]) {
     const wrapper = document.createElement('label');
+    wrapper.dataset.appearanceRow = name;
     const text = document.createElement('span');
     relabels.push(() => (text.textContent = label()));
     wrapper.append(text, input, ...extra);
@@ -149,61 +169,85 @@ export function mountAppearancePanel<A extends Appearance>(
   relabels.push(() => (heading.textContent = t('appearance')));
   container.append(heading);
 
-  const kind = document.createElement('select');
-  row(() => t('background'), kind);
-  relabels.push(() => {
-    const selected = kind.value;
-    kind.replaceChildren(...BACKGROUND_KINDS.map((value) => new Option(t(BACKGROUND_LABELS[value]), value)));
-    kind.value = selected || (current?.background.kind ?? 'solid');
-  });
-  bind(
-    kind,
-    (element, appearance) => withBackground(appearance, { kind: element.value as BackgroundKind }),
-    (element, appearance) => (element.value = appearance.background.kind),
-  );
+  if (showBackground) mountBackground();
 
-  const color = input('color');
-  const colorRow = row(() => t('backgroundColor'), color);
-  bind(
-    color,
-    (element, appearance) => withBackground(appearance, { color: element.value }),
-    (element, appearance) => (element.value = appearance.background.color),
-  );
+  function mountBackground() {
+    const kind = document.createElement('select');
+    row('background', () => t('background'), kind);
+    relabels.push(() => {
+      const selected = kind.value;
+      kind.replaceChildren(...BACKGROUND_KINDS.map((value) => new Option(t(BACKGROUND_LABELS[value]), value)));
+      kind.value = selected || (current?.background.kind ?? 'solid');
+    });
+    bind(
+      kind,
+      (element, appearance) => withBackground(appearance, { kind: element.value as BackgroundKind }),
+      (element, appearance) => (element.value = appearance.background.kind),
+    );
 
-  const imageUrl = input('url', { placeholder: 'https://', spellcheck: 'false' });
-  const imageRow = row(() => t('imageUrl'), imageUrl);
-  bind(
-    imageUrl,
-    (element, appearance) => withBackground(appearance, { imageUrl: element.value.trim() }),
-    (element, appearance) => (element.value = appearance.background.imageUrl),
-  );
-  syncs.push(() => {
-    colorRow.hidden = current?.background.kind === 'transparent';
-    imageRow.hidden = current?.background.kind !== 'image';
-  });
+    const color = input('color');
+    const colorRow = row('backgroundColor', () => t('backgroundColor'), color);
+    bind(
+      color,
+      (element, appearance) => withBackground(appearance, { color: element.value }),
+      (element, appearance) => (element.value = appearance.background.color),
+    );
+
+    const imageUrl = input('url', { placeholder: 'https://', spellcheck: 'false' });
+    const imageRow = row('imageUrl', () => t('imageUrl'), imageUrl);
+    bind(
+      imageUrl,
+      (element, appearance) => withBackground(appearance, { imageUrl: element.value.trim() }),
+      (element, appearance) => (element.value = appearance.background.imageUrl),
+    );
+    syncs.push(() => {
+      colorRow.hidden = current?.background.kind === 'transparent';
+      imageRow.hidden = current?.background.kind !== 'image';
+    });
+  }
 
   const fontFamily = input('text', { list: 'appearance-fonts', maxlength: String(MAX_FONT_FAMILY_LENGTH) });
   const fonts = document.createElement('datalist');
   fonts.id = 'appearance-fonts';
   fonts.append(...FONT_SUGGESTIONS.map((font) => new Option(font)));
   relabels.push(() => (fontFamily.placeholder = t('fontFamilyDefault')));
-  row(() => t('fontFamily'), fontFamily, fonts);
+  row('fontFamily', () => t('fontFamily'), fontFamily, fonts);
   bind(
     fontFamily,
     (element, appearance) => ({ ...appearance, fontFamily: element.value }),
     (element, appearance) => (element.value = appearance.fontFamily),
   );
 
-  const fontSize = input('number', { min: String(FONT_SIZE_RANGE.min), max: String(FONT_SIZE_RANGE.max), step: '1' });
-  row(() => t('fontSize'), fontSize).hidden = !showFontSize;
+  const fontSize = input('range', { min: String(fontSizeRange.min), max: String(fontSizeRange.max), step: '1' });
+  const fontSizeValue = document.createElement('output');
+  row('fontSize', () => t('fontSize'), fontSize, fontSizeValue).hidden = !showFontSize;
+  syncs.push(() => (fontSizeValue.textContent = current ? `${current.fontSize}px` : ''));
   bind(
     fontSize,
     (element, appearance) => ({ ...appearance, fontSize: element.valueAsNumber }),
     (element, appearance) => (element.value = String(appearance.fontSize)),
   );
 
+  /** One-click white and black buttons that set `key` to that color. */
+  const quickColors = (key: string) =>
+    (['#ffffff', '#000000'] as const).map((value) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'appearance__quick-color';
+      button.style.backgroundColor = value;
+      relabels.push(() => {
+        button.title = t(value === '#ffffff' ? 'colorWhite' : 'colorBlack');
+        button.setAttribute('aria-label', button.title);
+      });
+      button.addEventListener('click', () => {
+        if (current) onChange({ ...current, [key]: value });
+      });
+      return button;
+    });
+
   const textColor = input('color');
-  row(() => t('textColor'), textColor).hidden = !showTextColor;
+  row('textColor', () => t('textColor'), textColor, ...(textColorQuickColors ? quickColors('textColor') : [])).hidden =
+    !showTextColor;
   bind(
     textColor,
     (element, appearance) => ({ ...appearance, textColor: element.value }),
@@ -212,7 +256,7 @@ export function mountAppearancePanel<A extends Appearance>(
 
   const scale = input('range', { min: String(SCALE_RANGE.min), max: String(SCALE_RANGE.max), step: '0.05' });
   const scaleValue = document.createElement('output');
-  row(() => t('scale'), scale, scaleValue);
+  row('scale', () => t('scale'), scale, scaleValue).hidden = !showScale;
   bind(
     scale,
     (element, appearance) => ({ ...appearance, scale: element.valueAsNumber }),
@@ -222,23 +266,8 @@ export function mountAppearancePanel<A extends Appearance>(
 
   for (const field of fields) {
     const element = input('color');
-    const quick = field.quickColors
-      ? (['#ffffff', '#000000'] as const).map((value) => {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'appearance__quick-color';
-          button.style.backgroundColor = value;
-          relabels.push(() => {
-            button.title = t(value === '#ffffff' ? 'colorWhite' : 'colorBlack');
-            button.setAttribute('aria-label', button.title);
-          });
-          button.addEventListener('click', () => {
-            if (current) onChange({ ...current, [field.key]: value });
-          });
-          return button;
-        })
-      : [];
-    row(field.label, element, ...quick);
+    const quick = field.quickColors ? quickColors(field.key) : [];
+    row(field.key, field.label, element, ...quick);
     bind(
       element,
       (target, appearance) => ({ ...appearance, [field.key]: target.value }),

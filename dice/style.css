@@ -15,6 +15,7 @@ body {
 
 /* Font, text color and scale come from the appearance Settings (applied inline). */
 .dice__display {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -53,10 +54,63 @@ body {
   cursor: pointer;
 }
 
+/* The result sits over the bottom of the 3D stage; clicks go through to the stage (roll). */
 .dice__breakdown {
+  position: absolute;
+  bottom: 0.75em;
+  left: 0;
+  right: 0;
   margin: 0;
-  min-height: 1.5em;
+  text-align: center;
   font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  pointer-events: none;
+}
+
+.dice__total,
+.dice__terms {
+  display: block;
+}
+
+/*
+ * Readable over the dice and any background: a smooth outline in the contrasting color (--result-outline,
+ * set from the text color) plus a soft drop shadow. The stroke is drawn under the fill (paint-order:
+ * Chromium 123+, OBS 31+), so only its outer half shows; in em, so the smaller sum gets a thinner outline.
+ */
+.dice__breakdown {
+  --result-outline: rgb(0 0 0 / 0.8);
+  font-weight: 700;
+  -webkit-text-stroke: 0.1em var(--result-outline);
+  paint-order: stroke fill;
+  text-shadow: 0 0.08em 0.25em rgb(0 0 0 / 0.45);
+}
+
+.dice__terms {
+  font-weight: 600;
+  /* A thinner outline than the total's, relative to the smaller type, so the sum does not clog up. */
+  -webkit-text-stroke-width: 0.06em;
+}
+
+.dice__breakdown--in {
+  animation: dice-result-in 450ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes dice-result-in {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dice__breakdown--in {
+    animation: none;
+  }
+}
+
+/* The sum under the total, scaled with the result text size. */
+.dice__terms {
+  font-size: 0.4em;
 }
 
 .dice__controls {
@@ -109,6 +163,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.dice__appearance .appearance__quick-color {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid #888888;
+  border-radius: 0.25rem;
+  cursor: pointer;
 }
 
 .dice__appearance [hidden] {
@@ -250,4 +313,10 @@ body {
     height: auto;
     min-height: 12rem;
   }
+}
+
+/* Display mode (e.g. an OBS browser source): the dice fill the whole page. */
+html[data-display] .dice__stage {
+  width: 100vw;
+  height: 100vh;
 }

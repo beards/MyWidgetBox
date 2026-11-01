@@ -55,6 +55,9 @@ const DIE_SPACING = 2.4;
 /** Floor area per die, so many dice still have room to land. */
 const AREA_PER_DIE = 12;
 const MIN_AREA = 55;
+/** However large the dice are scaled, the area never gets smaller than this, nor than this much per die. */
+const SMALLEST_AREA = 9;
+const CROWDED_AREA_PER_DIE = 5;
 /** A die this slow for a moment falls asleep (counts as at rest) until something hits it. */
 const SLEEP_SPEED = 0.25;
 /** A die is flat when a face points this close to straight down (about 8 degrees). */
@@ -104,8 +107,16 @@ export const SAFETY_FRAMES = 30 * FRAME_RATE;
 const INITIAL_FRAMES = Math.ceil((WIND_DOWN + 1.5) * FRAME_RATE);
 
 /** A table area that fits the dice and the stage's aspect ratio (width / height on screen). */
-export function arenaFor(bodyCount: number, aspect: number): Arena {
-  const area = Math.max(MIN_AREA, bodyCount * AREA_PER_DIE);
+/**
+ * The walled area for this many dice on a stage of this aspect. `diceSize` (the appearance setting) makes
+ * the dice look bigger by walling in a smaller area, which the camera then fills; the dice always keep room to land.
+ */
+export function arenaFor(bodyCount: number, aspect: number, diceSize = 1): Arena {
+  const area = Math.max(
+    Math.max(MIN_AREA, bodyCount * AREA_PER_DIE) / diceSize ** 2,
+    SMALLEST_AREA,
+    bodyCount * CROWDED_AREA_PER_DIE,
+  );
   // Seen from about 55 degrees up (scene.ts) the depth looks shorter, so the walled area is deeper than the stage.
   const depthRatio = 1 / (Math.max(0.5, Math.min(3, aspect)) * Math.sin((55 * Math.PI) / 180));
   const halfWidth = Math.sqrt(area / depthRatio) / 2;

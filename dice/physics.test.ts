@@ -73,6 +73,28 @@ describe('staged dice roll (physics replay with face remap)', () => {
     });
   });
 
+  it('walls in a smaller area for bigger-looking dice, but always leaves them room', () => {
+    const area = ({ halfWidth, halfDepth }: { halfWidth: number; halfDepth: number }) => 4 * halfWidth * halfDepth;
+    expect(area(arenaFor(3, 2, 2))).toBeLessThan(area(arenaFor(3, 2)));
+    expect(area(arenaFor(3, 2, 0.5))).toBeGreaterThan(area(arenaFor(3, 2)));
+    expect(area(arenaFor(1, 2, 4))).toBeGreaterThanOrEqual(9 - 1e-9);
+    expect(area(arenaFor(20, 2, 4))).toBeGreaterThanOrEqual(20 * 5 - 1e-9);
+  });
+
+  it('keeps big-looking dice inside the walls of a small arena', () => {
+    const arena = arenaFor(4, 2, 4);
+    const roll = stageRoll([{ sides: 6, value: 1 }, { sides: 6, value: 2 }, { sides: 20, value: 3 }, { sides: 8, value: 4 }], {
+      random: seeded(7),
+      arena,
+    });
+    const last = roll.frameCount - 1;
+    roll.bodies.forEach((_, index) => {
+      const { x, z } = pose(roll, last, index).position;
+      expect(Math.abs(x)).toBeLessThan(arena.halfWidth);
+      expect(Math.abs(z)).toBeLessThan(arena.halfDepth);
+    });
+  });
+
   it('keeps every die on the table inside the invisible walls', () => {
     const roll = stage(ONE_OF_EACH, 3);
     const { halfWidth, halfDepth } = arenaFor(8, 2);
