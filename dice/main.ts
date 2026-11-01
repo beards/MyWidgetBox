@@ -16,6 +16,7 @@ import {
   type DiceSet,
   type DiceState,
   type DieSides,
+  type SpecialPips,
   type TableFinish,
   TABLE_BOUNCE_MAX,
   animationFor,
@@ -73,6 +74,7 @@ const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelec
 });
 const tableFinishInput = mountTableFinish(document.querySelector<HTMLElement>('#appearance')!);
 const tableBounce = mountTableBounce(document.querySelector<HTMLElement>('#appearance')!);
+const specialPipsInputs = mountSpecialPips(document.querySelector<HTMLElement>('#appearance')!);
 const presetPanel = mountPresetPanel(dice, i18n);
 const sharePanel = mountSharePanel(i18n, (options) => dice.shareLink(options));
 mountSettingsFilePanel(i18n, {
@@ -93,7 +95,12 @@ function renderAddSides() {
 function render(state: DiceState) {
   const { diceSet, appearance, outcome, history, animating } = state;
   applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
-  scene.setColors({ body: appearance.dieColor, label: appearance.pipColor });
+  const { specialPips } = appearance;
+  scene.setColors({
+    body: appearance.dieColor,
+    label: appearance.pipColor,
+    specialPips: specialPips.enabled ? { values: specialPips.values, color: specialPips.color } : null,
+  });
   // With a transparent background only the dice and their shadows show (e.g. over a stream in OBS).
   const transparent = displayOptions.transparent || appearance.background.kind === 'transparent';
   scene.setTable({ color: appearance.tableColor, finish: appearance.tableFinish, visible: !transparent });
@@ -101,6 +108,7 @@ function render(state: DiceState) {
   tableFinishInput.value = appearance.tableFinish;
   if (document.activeElement !== tableBounce.input) tableBounce.input.value = String(appearance.tableBounce);
   tableBounce.value.textContent = formatBounce(appearance.tableBounce);
+  specialPipsInputs.update(appearance.specialPips);
 
   presetPanel.update(state);
 
@@ -167,6 +175,65 @@ function render(state: DiceState) {
 }
 
 /** The table bounce slider (0..TABLE_BOUNCE_MAX), added to the appearance panel after the table finish. */
+/** The special pips choice: whether to color some d6 faces' pips, which faces (1..6), and in what color. */
+function mountSpecialPips(container: HTMLElement): { update(specialPips: SpecialPips): void } {
+  const enabledLabel = document.createElement('label');
+  const enabled = document.createElement('input');
+  enabled.type = 'checkbox';
+  const enabledText = document.createElement('span');
+  enabledLabel.append(enabled, enabledText);
+
+  const facesRow = document.createElement('div');
+  facesRow.className = 'dice__special-pips';
+  const facesText = document.createElement('span');
+  const faces = [1, 2, 3, 4, 5, 6].map((value) => {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = String(value);
+    label.append(input, String(value));
+    return { label, input };
+  });
+  facesRow.append(facesText, ...faces.map(({ label }) => label));
+
+  const colorLabel = document.createElement('label');
+  const colorText = document.createElement('span');
+  const color = document.createElement('input');
+  color.type = 'color';
+  colorLabel.append(colorText, color);
+
+  const relabel = () => {
+    enabledText.textContent = t('specialPips');
+    facesText.textContent = t('specialPipsFaces');
+    colorText.textContent = t('specialPipsColor');
+  };
+  relabel();
+  i18n.subscribe(relabel);
+
+  const change = (next: Partial<SpecialPips>) => {
+    const { appearance } = dice.getState();
+    dice.setAppearance({ ...appearance, specialPips: { ...appearance.specialPips, ...next } });
+  };
+  enabled.addEventListener('change', () => change({ enabled: enabled.checked }));
+  for (const { input } of faces) {
+    input.addEventListener('change', () =>
+      change({ values: faces.filter(({ input: face }) => face.checked).map(({ input: face }) => Number(face.value)) }),
+    );
+  }
+  color.addEventListener('input', () => change({ color: color.value }));
+  container.append(enabledLabel, facesRow, colorLabel);
+
+  return {
+    update(specialPips) {
+      enabled.checked = specialPips.enabled;
+      faces.forEach(({ input }) => (input.checked = specialPips.values.includes(Number(input.value))));
+      color.value = specialPips.color;
+      // The faces and color only matter while the option is on.
+      facesRow.hidden = colorLabel.hidden = !specialPips.enabled;
+    },
+  };
+}
+
 function mountTableBounce(container: HTMLElement): { input: HTMLInputElement; value: HTMLOutputElement } {
   const label = document.createElement('label');
   const text = document.createElement('span');

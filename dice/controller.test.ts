@@ -546,9 +546,10 @@ describe('dice appearance Settings', () => {
     tableColor: '#5a3a20',
     tableFinish: 'wood',
     tableBounce: 0.9,
+    specialPips: { enabled: false, values: [6], color: '#0000ff' },
   };
 
-  it('opens with a solid white background, ivory dice with dark pips on a green felt table and no scaling', () => {
+  it('opens with a solid white background, ivory dice with dark pips (red on the 1 and 4) on a green felt table and no scaling', () => {
     expect(createDiceController(createTestEnv()).getState().appearance).toEqual({
       background: { kind: 'solid', color: '#ffffff', imageUrl: '' },
       fontFamily: '',
@@ -560,6 +561,7 @@ describe('dice appearance Settings', () => {
       tableColor: '#2e6b4f',
       tableFinish: 'felt',
       tableBounce: 0.6,
+      specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
     });
   });
 
@@ -617,6 +619,10 @@ describe('dice appearance Settings', () => {
     ['a table bounce above the maximum', { tableBounce: 1.55 }],
     ['a negative table bounce', { tableBounce: -0.1 }],
     ['a table bounce that is not a number', { tableBounce: '0.5' }],
+    ['a missing special pips setting', { specialPips: undefined }],
+    ['a special pip face above 6', { specialPips: { enabled: true, values: [7], color: '#ff0000' } }],
+    ['a special pip face listed twice', { specialPips: { enabled: true, values: [1, 1], color: '#ff0000' } }],
+    ['a special pip color that is not #rrggbb', { specialPips: { enabled: true, values: [1], color: 'red' } }],
   ])('ignores an appearance with %s', (_, change) => {
     const dice = createDiceController(createTestEnv());
     dice.setAppearance(custom);
@@ -657,6 +663,7 @@ describe('dice appearance Settings', () => {
     delete partial.tableColor;
     delete partial.tableFinish;
     delete partial.tableBounce;
+    delete partial.specialPips;
     env.storage.setItem(
       settingsStorageKey('dice'),
       JSON.stringify({
@@ -673,6 +680,7 @@ describe('dice appearance Settings', () => {
       tableColor: '#2e6b4f',
       tableFinish: 'felt',
       tableBounce: 0.6,
+      specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
     });
   });
 

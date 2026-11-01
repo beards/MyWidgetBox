@@ -185,25 +185,111 @@ function rotationBetween([a1, a2]: [Vector3, Vector3], [b1, b2]: [Vector3, Vecto
   return new Quaternion().setFromRotationMatrix(target.multiply(source.transpose()));
 }
 
-/** Flat-shaded mesh geometry with one material group per face (in shape.faces order) and UVs centred on each face. */
+/**
+ * How far each die's edges and corners are rounded off, in die units (a d6 is 1.2 across). The rounded
+ * die is the shape shrunk toward its centre and grown back by this radius, so every face stays in its
+ * plane: the die rests at the same height and the physics hull (dieHull) still fits it.
+ */
+const ROUNDING: Record<BodySides, number> = { 4: 0.08, 6: 0.12, 8: 0.07, 10: 0.06, 12: 0.07, 20: 0.06 };
+/** Segments across each rounded edge. */
+const ROUNDING_SEGMENTS = 6;
+
+/**
+ * Smooth-shaded mesh of the die with rounded edges and corners. One material group per face (in
+ * shape.faces order), with UVs mapping the face's circumscribed circle onto the texture square, then one
+ * last group (index shape.faces.length) for the rounded edges and corners.
+ */
 export function createDieGeometry(shape: DieShape): BufferGeometry {
+  const radius = ROUNDING[shape.sides];
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
   const geometry = new BufferGeometry();
+  const vertex = (position: Vector3, normal: Vector3, uv: [number, number] = [0, 0]) => {
+    positions.push(position.x, position.y, position.z);
+    normals.push(normal.x, normal.y, normal.z);
+    uvs.push(...uv);
+  };
+  const distance = shape.faces[0]!.centroid.dot(shape.faces[0]!.normal);
+  // Every face is the same distance from the centre, so shrinking toward it moves all faces in by `radius`.
+  const shrink = 1 - radius / distance;
+  const inner = (corner: Vector3) => corner.clone().multiplyScalar(shrink);
+  /** A point on the rounded surface: `at` on the shrunk die, pushed out along `normal`. */
+  const surface = (at: Vector3, normal: Vector3) => at.clone().addScaledVector(normal, radius);
+
   shape.faces.forEach((face, index) => {
     const right = face.up.clone().cross(face.normal);
     const start = positions.length / 3;
     for (const triangle of face.triangles) {
       for (const point of triangle) {
         const offset = point.clone().sub(face.centroid);
-        positions.push(point.x, point.y, point.z);
-        normals.push(face.normal.x, face.normal.y, face.normal.z);
-        uvs.push(0.5 + offset.dot(right) / (2 * face.radius), 0.5 + offset.dot(face.up) / (2 * face.radius));
+        // The flat part is the face scaled by `shrink` about its centroid; the texture covers just that.
+        const span = 2 * face.radius;
+        vertex(surface(inner(point), face.normal), face.normal, [0.5 + offset.dot(right) / span, 0.5 + offset.dot(face.up) / span]);
       }
     }
     geometry.addGroup(start, positions.length / 3 - start, index);
   });
+
+  const start = positions.length / 3;
+  /** A triangle of the rounded part, wound to face outward (along its vertex normals). */
+  const triangle = (points: [Vector3, Vector3][]) => {
+    const [[a], [b], [c]] = points as [[Vector3, Vector3], [Vector3, Vector3], [Vector3, Vector3]];
+    const facing = b.clone().sub(a).cross(c.clone().sub(a));
+    const outward = points.reduce((sum, [, normal]) => sum.add(normal), new Vector3());
+    const ordered = facing.dot(outward) >= 0 ? points : [points[0]!, points[2]!, points[1]!];
+    ordered.forEach(([position, normal]) => vertex(position, normal));
+  };
+  // Normals are blended linearly, then normalized, both along the edges and over the corners, so the
+  // edge strips and corner patches meet without cracks.
+  const blend = (weights: [Vector3, number][]) =>
+    weights.reduce((sum, [normal, weight]) => sum.addScaledVector(normal, weight), new Vector3()).normalize();
+
+  // Edges: a strip of a cylinder around each edge of the shrunk die, turning from one face normal to the next.
+  shape.faces.forEach((a, i) => {
+    shape.faces.slice(i + 1).forEach((b) => {
+      const shared = uniquePoints(a.triangles.flat()).filter((point) => b.triangles.flat().some((other) => other.distanceTo(point) < EPSILON));
+      if (shared.length !== 2) return;
+      const [p, q] = shared.map(inner) as [Vector3, Vector3];
+      for (let s = 0; s < ROUNDING_SEGMENTS; s++) {
+        const t0 = s / ROUNDING_SEGMENTS;
+        const t1 = (s + 1) / ROUNDING_SEGMENTS;
+        const n0 = blend([[a.normal, 1 - t0], [b.normal, t0]]);
+        const n1 = blend([[a.normal, 1 - t1], [b.normal, t1]]);
+        triangle([[surface(p, n0), n0], [surface(q, n0), n0], [surface(q, n1), n1]]);
+        triangle([[surface(p, n0), n0], [surface(q, n1), n1], [surface(p, n1), n1]]);
+      }
+    });
+  });
+
+  // Corners: a patch of a sphere around each corner of the shrunk die, filling the gap between its edge strips.
+  for (const corner of cornerPoints(shape)) {
+    const around = shape.faces.filter((face) => face.triangles.flat().some((point) => point.distanceTo(corner) < EPSILON));
+    const centre = blend(around.map((face) => [face.normal, 1]));
+    const side = perpendicular(centre, around.map((face) => face.normal));
+    const ahead = centre.clone().cross(side);
+    around.sort(
+      (f, g) => Math.atan2(f.normal.dot(ahead), f.normal.dot(side)) - Math.atan2(g.normal.dot(ahead), g.normal.dot(side)),
+    );
+    const at = inner(corner);
+    const n = ROUNDING_SEGMENTS;
+    around.forEach((face, k) => {
+      const next = around[(k + 1) % around.length]!;
+      // A triangle grid between the centre direction and two neighbouring face normals.
+      const point = (i: number, j: number): [Vector3, Vector3] => {
+        const normal = blend([[centre, n - i - j], [face.normal, i], [next.normal, j]]);
+        return [surface(at, normal), normal];
+      };
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; i + j < n; j++) {
+          triangle([point(i, j), point(i + 1, j), point(i, j + 1)]);
+          if (i + j < n - 1) triangle([point(i + 1, j), point(i + 1, j + 1), point(i, j + 1)]);
+        }
+      }
+    });
+  }
+  geometry.addGroup(start, positions.length / 3 - start, shape.faces.length);
+
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
   geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));

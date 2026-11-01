@@ -49,6 +49,16 @@ export interface DiceAppearance extends Appearance {
   tableFinish: TableFinish;
   /** How bouncy the table is, 0 (dead) .. TABLE_BOUNCE_MAX; only changes how the roll is staged. */
   tableBounce: number;
+  /** d6 faces whose pips get their own color instead of pipColor (like the red 1 and 4 of common dice). */
+  specialPips: SpecialPips;
+}
+
+export interface SpecialPips {
+  enabled: boolean;
+  /** d6 face values 1..6, each at most once. */
+  values: number[];
+  /** `#rrggbb` color of those faces' pips. */
+  color: string;
 }
 
 /**
@@ -182,6 +192,7 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
       tableColor: '#2e6b4f',
       tableFinish: 'felt',
       tableBounce: 0.6,
+      specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
     },
   },
   isValid: (settings): settings is DiceSettings =>
@@ -193,7 +204,7 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
 };
 
 function isDiceAppearance(value: unknown): value is DiceAppearance {
-  const { dieColor, pipColor, tableColor, tableFinish, tableBounce } = (value ?? {}) as Partial<DiceAppearance>;
+  const { dieColor, pipColor, tableColor, tableFinish, tableBounce, specialPips } = (value ?? {}) as Partial<DiceAppearance>;
   return (
     isAppearance(value) &&
     isHexColor(dieColor) &&
@@ -202,7 +213,19 @@ function isDiceAppearance(value: unknown): value is DiceAppearance {
     TABLE_FINISHES.includes(tableFinish as TableFinish) &&
     typeof tableBounce === 'number' &&
     tableBounce >= 0 &&
-    tableBounce <= TABLE_BOUNCE_MAX
+    tableBounce <= TABLE_BOUNCE_MAX &&
+    isSpecialPips(specialPips)
+  );
+}
+
+function isSpecialPips(value: unknown): value is SpecialPips {
+  const { enabled, values, color } = (value ?? {}) as Partial<SpecialPips>;
+  return (
+    typeof enabled === 'boolean' &&
+    Array.isArray(values) &&
+    values.every((pips) => Number.isInteger(pips) && pips >= 1 && pips <= 6) &&
+    new Set(values).size === values.length &&
+    isHexColor(color)
   );
 }
 

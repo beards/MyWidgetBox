@@ -119,6 +119,22 @@ body {
   min-width: 7rem;
 }
 
+/* The special pips faces: a caption, then the six face checkboxes in a row. */
+.dice__special-pips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dice__special-pips > span {
+  min-width: 7rem;
+}
+
+.dice__special-pips label {
+  gap: 0.15rem;
+}
+
 .dice__appearance input[type='text'],
 .dice__appearance input[type='url'] {
   width: 12rem;

@@ -48,6 +48,9 @@ export type DiceMessageKey =
   | 'tableColor'
   | 'tableFinish'
   | 'tableBounce'
+  | 'specialPips'
+  | 'specialPipsFaces'
+  | 'specialPipsColor'
   | 'finishFelt'
   | 'finishWood'
   | 'finishPlain';
@@ -101,6 +104,9 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     tableColor: 'Table color',
     tableFinish: 'Table surface',
     tableBounce: 'Table bounce',
+    specialPips: 'Color some d6 pips differently',
+    specialPipsFaces: 'Faces',
+    specialPipsColor: 'Their color',
     finishFelt: 'Felt',
     finishWood: 'Wood',
     finishPlain: 'Plain',
@@ -153,6 +159,9 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     tableColor: '桌面顏色',
     tableFinish: '桌面質感',
     tableBounce: '桌面彈性',
+    specialPips: '特殊點數塗色',
+    specialPipsFaces: '點數',
+    specialPipsColor: '塗色',
     finishFelt: '絨布',
     finishWood: '木紋',
     finishPlain: '素面',

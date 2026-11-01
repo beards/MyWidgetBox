@@ -54,6 +54,8 @@ export interface DiceScene {
 export interface DiceColors {
   body: string;
   label: string;
+  /** d6 faces whose pips are painted in their own color instead (null: none). */
+  specialPips: { values: number[]; color: string } | null;
 }
 
 export interface TableLook {
@@ -62,7 +64,7 @@ export interface TableLook {
   visible: boolean;
 }
 
-const DEFAULT_COLORS: DiceColors = { body: '#f7f3e8', label: '#1f1f1f' };
+const DEFAULT_COLORS: DiceColors = { body: '#f7f3e8', label: '#1f1f1f', specialPips: { values: [1, 4], color: '#c62828' } };
 const FIELD_OF_VIEW = 32;
 /** The camera looks down at the table from this many degrees above it. */
 const ELEVATION = (55 * Math.PI) / 180;
@@ -71,6 +73,9 @@ const PHYSICS_BODY_LIMIT = 80;
 /** How long the top faces light up once the dice rest, and in what color. */
 const HIGHLIGHT_MS = 1400;
 const HIGHLIGHT_COLOR = '#ffc94a';
+const HIGHLIGHT_STRENGTH = 1.2;
+/** Colors that paint a face's label mask: labels white, the rest black. */
+const MASK_COLORS: DiceColors = { body: '#000000', label: '#ffffff', specialPips: null };
 /** Table texture tile size in world units (a die is about 2 across). */
 const TILE = { felt: 6, wood: 14 } as const;
 
@@ -79,6 +84,8 @@ interface Model {
   shape: DieShape;
   geometry: BufferGeometry;
   materials: Material[];
+  /** Label masks by face index and lit label, made when first needed (see labelMask). */
+  labelMasks: Map<string, CanvasTexture>;
 }
 
 interface Placed {
@@ -87,6 +94,7 @@ interface Placed {
   materials: Material[];
   body: DieBody;
   shape: DieShape;
+  labelMasks: Map<string, CanvasTexture>;
 }
 
 export function createDiceScene(container: HTMLElement): DiceScene {
@@ -135,16 +143,13 @@ export function createDiceScene(container: HTMLElement): DiceScene {
   let colors = DEFAULT_COLORS;
   let tableKey = '';
 
+  /** One material per face, then one for the rounded edges and corners (see createDieGeometry). */
   function faceMaterials(shape: DieShape): Material[] {
-    return shape.faces.map(
-      (face) =>
-        new MeshPhysicalMaterial({
-          map: faceTexture(face, shape, colors),
-          roughness: 0.32,
-          clearcoat: 0.6,
-          clearcoatRoughness: 0.25,
-        }),
-    );
+    const plastic = { roughness: 0.32, clearcoat: 0.6, clearcoatRoughness: 0.25 };
+    return [
+      ...shape.faces.map((face) => new MeshPhysicalMaterial({ map: faceTexture(face, shape, colors), ...plastic })),
+      new MeshPhysicalMaterial({ color: colors.body, ...plastic }),
+    ];
   }
 
   function model(body: DieBody): Model {
@@ -152,7 +157,7 @@ export function createDiceScene(container: HTMLElement): DiceScene {
     let found = models.get(key);
     if (!found) {
       const shape = dieShape(body.sides, body.labels);
-      found = { sides: body.sides, shape, geometry: createDieGeometry(shape), materials: faceMaterials(shape) };
+      found = { sides: body.sides, shape, geometry: createDieGeometry(shape), materials: faceMaterials(shape), labelMasks: new Map() };
       models.set(key, found);
     }
     return found;
@@ -164,12 +169,12 @@ export function createDiceScene(container: HTMLElement): DiceScene {
     clearHighlights();
     arena = arenaFor(bodies.length, aspect());
     placed = bodies.map((body) => {
-      const { shape, geometry, materials } = model(body);
+      const { shape, geometry, materials, labelMasks } = model(body);
       const mesh = new Mesh(geometry, materials);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       scene.add(mesh);
-      return { mesh, materials, body, shape };
+      return { mesh, materials, body, shape, labelMasks };
     });
     fitCamera();
   }
@@ -256,14 +261,18 @@ export function createDiceScene(container: HTMLElement): DiceScene {
   function highlight() {
     clearHighlights();
     const glowing: MeshPhysicalMaterial[] = [];
-    for (const { mesh, materials, body, shape } of placed) {
+    for (const { mesh, materials, body, shape, labelMasks } of placed) {
       const top = shape.readings.find((reading) => reading.label === body.label)!.direction;
       mesh.material = materials.map((material, index) => {
-        const face = shape.faces[index]!;
+        const face = shape.faces[index];
+        // The rounded edges and corners stay unlit.
+        if (!face) return material;
         const lit = shape.sides === 4 ? face.normal.dot(top) > 0 : face.label === body.label;
         if (!lit) return material;
         const glow = (material as MeshPhysicalMaterial).clone();
         glow.emissive.set(HIGHLIGHT_COLOR);
+        // Only the pips or numbers glow, not the whole face.
+        glow.emissiveMap = labelMask(labelMasks, shape, index, body.label);
         glowing.push(glow);
         return glow;
       });
@@ -273,7 +282,7 @@ export function createDiceScene(container: HTMLElement): DiceScene {
       const t = Math.min(1, (now - start) / HIGHLIGHT_MS);
       // Up quickly, then fade out.
       const intensity = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
-      glowing.forEach((material) => (material.emissiveIntensity = 0.45 * intensity));
+      glowing.forEach((material) => (material.emissiveIntensity = HIGHLIGHT_STRENGTH * intensity));
       render();
       if (t < 1) {
         frame = requestAnimationFrame(step);
@@ -394,7 +403,7 @@ export function createDiceScene(container: HTMLElement): DiceScene {
     },
 
     setColors(next) {
-      if (next.body === colors.body && next.label === colors.label) return;
+      if (JSON.stringify(next) === JSON.stringify(colors)) return;
       colors = next;
       // Textures are painted with the colors: repaint every cached model. Meshes share the
       // model's materials array, so replacing its contents recolors them in place.
@@ -427,6 +436,17 @@ export function createDiceScene(container: HTMLElement): DiceScene {
   };
 }
 
+/** The mask lighting up `label` on face `index`: on a d4 only the number at the top corner, else the face label. */
+function labelMask(cache: Map<string, CanvasTexture>, shape: DieShape, index: number, label: string): CanvasTexture {
+  const key = `${index}:${label}`;
+  let mask = cache.get(key);
+  if (!mask) {
+    mask = faceTexture(shape.faces[index]!, shape, MASK_COLORS, label);
+    cache.set(key, mask);
+  }
+  return mask;
+}
+
 /** Height of the die centre above the table when it rests with this orientation. */
 function restingHeight(shape: DieShape, orientation: Quaternion): number {
   const corners = shape.faces.flatMap((face) => face.triangles.flat());
@@ -442,7 +462,9 @@ function easeOutCubic(t: number) {
  * texture square, so a face label is sized to fit the face's inscribed circle. A d4 face instead
  * shows the numbers of its three corners, each near its corner and pointing at it.
  */
-function faceTexture(face: DieFace, shape: DieShape, colors: DiceColors): CanvasTexture {
+/** With `maskLabel`, paints a highlight mask instead: only that label, in the given (mask) colors. */
+function faceTexture(face: DieFace, shape: DieShape, colors: DiceColors, maskLabel?: string): CanvasTexture {
+  const mask = maskLabel !== undefined;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 256;
   const context = canvas.getContext('2d')!;
@@ -457,6 +479,7 @@ function faceTexture(face: DieFace, shape: DieShape, colors: DiceColors): Canvas
     context.font = `bold ${inscribed * 0.62}px system-ui, sans-serif`;
     for (const corner of face.triangles[0]!) {
       const label = shape.readings.find((reading) => reading.direction.distanceTo(corner.clone().normalize()) < 1e-6)!.label;
+      if (mask && label !== maskLabel) continue;
       const offset = corner.clone().sub(face.centroid);
       // Canvas coordinates of the corner (texture v runs up, canvas y down).
       const dx = (offset.dot(right) / face.radius) * 128;
@@ -467,6 +490,10 @@ function faceTexture(face: DieFace, shape: DieShape, colors: DiceColors): Canvas
       context.fillText(label, 0, 0);
       context.restore();
     }
+  } else if (shape.sides === 6) {
+    const value = Number(face.label);
+    if (colors.specialPips?.values.includes(value)) context.fillStyle = colors.specialPips.color;
+    drawPips(context, value, inscribed);
   } else {
     const fontSize = inscribed * (face.label.length > 1 ? 1.05 : 1.35);
     context.font = `bold ${fontSize}px system-ui, sans-serif`;
@@ -481,6 +508,28 @@ function faceTexture(face: DieFace, shape: DieShape, colors: DiceColors): Canvas
   texture.colorSpace = SRGBColorSpace;
   texture.anisotropy = 4;
   return texture;
+}
+
+/** Pip positions on a d6 face, in units of half the face side (x right, y down). */
+const PIPS: Record<number, [number, number][]> = {
+  1: [[0, 0]],
+  2: [[-1, -1], [1, 1]],
+  3: [[-1, -1], [0, 0], [1, 1]],
+  4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
+  5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+  6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+};
+
+/** Draws the pips of a d6 face, like a real die, on a face texture whose square face has this half side. */
+function drawPips(context: CanvasRenderingContext2D, value: number, halfSide: number) {
+  const spread = halfSide * 0.5;
+  // The single pip of a 1 is drawn much larger, as on most real dice.
+  const pip = halfSide * (value === 1 ? 0.42 : 0.22);
+  for (const [x, y] of PIPS[value] ?? []) {
+    context.beginPath();
+    context.arc(128 + x * spread, 128 + y * spread, pip, 0, Math.PI * 2);
+    context.fill();
+  }
 }
 
 /** A grey tileable surface pattern, tinted by the table color: felt fibres or wood planks. */
