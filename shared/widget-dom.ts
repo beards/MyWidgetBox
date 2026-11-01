@@ -166,6 +166,7 @@ export function mountSoundInputs(
 ) {
   const enabled = $<HTMLInputElement>('#sound-enabled');
   const volume = $<HTMLInputElement>('#sound-volume');
+  const volumeValue = $('#sound-volume-value');
   const url = $<HTMLInputElement>('#sound-url');
 
   enabled.addEventListener('change', () => controller.setSound({ enabled: enabled.checked }));
@@ -181,6 +182,7 @@ export function mountSoundInputs(
     update(sound: SoundSettings) {
       enabled.checked = sound.enabled;
       volume.value = String(Math.round(sound.volume * 100));
+      volumeValue.textContent = `${volume.value}%`;
       volume.disabled = !sound.enabled;
       if (document.activeElement !== url) url.value = sound.url;
     },

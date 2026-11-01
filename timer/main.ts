@@ -1,10 +1,11 @@
 // View layer: owns the DOM, subscribes to the controller, and calls its actions.
 import type { ScaledAppearance } from '../shared/appearance';
-import { applyAppearance, mountAppearancePanel } from '../shared/appearance-dom';
+import { applyAppearance, mountAppearancePanel, orderAppearanceRows } from '../shared/appearance-dom';
 import { applyDisplayMode } from '../shared/display-mode';
 import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
+import { mountPanelToggle } from '../shared/panel-toggle';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
 import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
@@ -31,6 +32,7 @@ const timer = createTimerController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
 mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
+mountPanelToggle(document.querySelector<HTMLButtonElement>('#panel-toggle')!);
 const t = i18n.t;
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -55,6 +57,8 @@ const appearancePanel = mountAppearancePanel<ScaledAppearance>($('#appearance'),
     appearancePanel.update(timer.getState().appearance);
   },
 });
+// The timers' digits first, then the background.
+orderAppearanceRows($('#appearance'), ['scale', 'fontFamily', 'fontSize', 'textColor', 'background', 'backgroundColor', 'imageUrl']);
 const presetPanel = mountPresetPanel(timer, i18n);
 const sharePanel = mountSharePanel(i18n, (options) =>
   // `?timer=` only applies in Display mode.

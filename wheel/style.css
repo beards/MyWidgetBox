@@ -14,7 +14,7 @@ body {
   padding: 1rem 0;
 }
 
-/* Font, text color and scale come from the appearance Settings (applied inline). */
+/* Font and text color come from the appearance Settings (applied inline). */
 .wheel__display {
   position: relative;
   display: grid;
@@ -113,21 +113,7 @@ body {
 }
 
 .wheel__controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 16rem;
   max-width: min(92vw, 34rem);
-  /* Keeps the controls readable over any appearance background. */
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  background: rgb(255 255 255 / 0.9);
-  color: #222;
-}
-
-.wheel__controls h2 {
-  margin: 0.75rem 0 0;
-  font-size: 1rem;
 }
 
 .wheel__row,
@@ -269,11 +255,7 @@ body {
   }
 }
 
-/* Narrow screens: keep the padded panel and the entry rows inside the viewport. */
-.wheel__controls {
-  box-sizing: border-box;
-}
-
+/* Narrow screens: keep the entry rows inside the viewport. */
 .wheel__entries input[type='color'] {
   flex: none;
 }

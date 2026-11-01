@@ -1,9 +1,10 @@
 // View layer: owns the DOM, subscribes to the controller, and calls its actions.
-import { applyAppearance, mountAppearancePanel } from '../shared/appearance-dom';
+import { applyAppearance, mountAppearancePanel, orderAppearanceRows } from '../shared/appearance-dom';
 import { applyDisplayMode } from '../shared/display-mode';
 import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
+import { mountPanelToggle } from '../shared/panel-toggle';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
 import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
@@ -35,6 +36,7 @@ const wheel = createWheelController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
 mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
+mountPanelToggle(document.querySelector<HTMLButtonElement>('#panel-toggle')!);
 const t = i18n.t;
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -77,13 +79,25 @@ const appearancePanel = mountAppearancePanel<WheelAppearance>($('#appearance'), 
   fontSize: false,
   // Every text on the wheel follows the wheel's own text color instead.
   textColor: false,
-  scale: true,
   onChange(appearance) {
     wheel.setAppearance(appearance);
     appearancePanel.update(wheel.getState().appearance);
   },
 });
 const labelOptions = mountLabelOptions($('#appearance'));
+// The text on the wheel first, then the pointer and the result pop-up, then the background.
+orderAppearanceRows($('#appearance'), [
+  'fontFamily',
+  'labelColor',
+  'labelDirection',
+  'limitLabelSize',
+  'maxLabelSize',
+  'pointerColor',
+  'resultTextSize',
+  'background',
+  'backgroundColor',
+  'imageUrl',
+]);
 const presetPanel = mountPresetPanel(wheel, i18n);
 const sharePanel = mountSharePanel(i18n, (options) => wheel.shareLink(options));
 const settingsFilePanel = mountSettingsFilePanel(i18n, {
@@ -295,6 +309,7 @@ function mountLabelOptions(container: HTMLElement) {
   const change = (changes: Partial<WheelAppearance>) => wheel.setAppearance({ ...wheel.getState().appearance, ...changes });
 
   const directionLabel = document.createElement('label');
+  directionLabel.dataset.appearanceRow = 'labelDirection';
   const directionText = document.createElement('span');
   const direction = document.createElement('select');
   const directionOptions = LABEL_DIRECTIONS.map((value) => {
@@ -307,6 +322,7 @@ function mountLabelOptions(container: HTMLElement) {
   directionLabel.append(directionText, direction);
 
   const toggleLabel = document.createElement('label');
+  toggleLabel.dataset.appearanceRow = 'limitLabelSize';
   const toggle = document.createElement('input');
   toggle.type = 'checkbox';
   const toggleText = document.createElement('span');
@@ -314,6 +330,7 @@ function mountLabelOptions(container: HTMLElement) {
   toggleLabel.append(toggle, toggleText);
 
   const sliderLabel = document.createElement('label');
+  sliderLabel.dataset.appearanceRow = 'maxLabelSize';
   const sliderText = document.createElement('span');
   const slider = document.createElement('input');
   slider.type = 'range';
@@ -325,6 +342,7 @@ function mountLabelOptions(container: HTMLElement) {
   sliderLabel.append(sliderText, slider, value);
 
   const resultSizeLabel = document.createElement('label');
+  resultSizeLabel.dataset.appearanceRow = 'resultTextSize';
   const resultSizeText = document.createElement('span');
   const resultSize = document.createElement('input');
   resultSize.type = 'range';
@@ -345,7 +363,6 @@ function mountLabelOptions(container: HTMLElement) {
   };
   relabel();
   i18n.subscribe(relabel);
-  // After the entry text options, so the two kinds of text size are not mistaken for each other.
   container.append(directionLabel, toggleLabel, sliderLabel, resultSizeLabel);
 
   return {

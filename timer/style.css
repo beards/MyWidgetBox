@@ -121,23 +121,6 @@ body {
   width: 3.5rem;
 }
 
-.timer__controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 16rem;
-  /* Keeps the controls readable over any appearance background. */
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  background: rgb(255 255 255 / 0.9);
-  color: #222;
-}
-
-.timer__controls h2 {
-  margin: 0.75rem 0 0;
-  font-size: 1rem;
-}
-
 .timer__row,
 .timer__appearance label {
   display: flex;

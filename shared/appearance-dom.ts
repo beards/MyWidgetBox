@@ -327,3 +327,11 @@ export function mountAppearancePanel<A extends PanelAppearance>(
     },
   };
 }
+
+/**
+ * Puts the appearance rows (data-appearance-row, including a Widget's own) in the given reading
+ * order: by convention the Widget's own subject first, then its text, then the background.
+ */
+export function orderAppearanceRows(container: HTMLElement, order: string[]): void {
+  container.append(...order.map((name) => container.querySelector<HTMLElement>(`[data-appearance-row="${name}"]`)!));
+}

@@ -113,23 +113,6 @@ body {
   font-size: 0.4em;
 }
 
-.dice__controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 16rem;
-  /* Keeps the controls readable over any appearance background. */
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  background: rgb(255 255 255 / 0.9);
-  color: #222;
-}
-
-.dice__controls h2 {
-  margin: 0.75rem 0 0;
-  font-size: 1rem;
-}
-
 .dice__groups,
 .dice__history {
   margin: 0;
@@ -148,6 +131,11 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* The shake permission status is usually empty; no paragraph margins around it. */
+#shake-status {
+  margin: 0;
 }
 
 .dice__presets input {
@@ -272,13 +260,9 @@ body {
 }
 
 /* Narrow screens: control rows wrap instead of pushing the page sideways. */
-.dice__controls {
-  box-sizing: border-box;
-  max-width: 100vw;
-}
-
 .dice__presets,
 .dice__add,
+.dice__sound,
 .dice__share-copy {
   flex-wrap: wrap;
 }

@@ -42,6 +42,7 @@ export type DiceMessageKey =
   | 'importError'
   | 'restoreDefaults'
   | 'restoreDefaultsConfirm'
+  | 'panelToggle'
   | 'home'
   | 'dieColor'
   | 'pipColor'
@@ -101,6 +102,7 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     importError: 'This file could not be imported. Your Settings were not changed.',
     restoreDefaults: 'Restore defaults',
     restoreDefaultsConfirm: 'Replace the Settings of this Preset with the defaults?',
+    panelToggle: 'Settings',
     home: '← All widgets',
     dieColor: 'Die color',
     pipColor: 'Pip color',
@@ -158,6 +160,7 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     importError: '無法匯入此檔案，現有 Settings 未變更。',
     restoreDefaults: '回復預設值',
     restoreDefaultsConfirm: '要把這個 Preset 的設定全部回復成預設值嗎？',
+    panelToggle: '設定',
     home: '← 所有工具',
     dieColor: '骰子顏色',
     pipColor: '點數顏色',

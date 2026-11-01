@@ -1,8 +1,9 @@
 // View layer: owns the DOM, subscribes to the controller, and calls its actions.
-import { applyAppearance, mountAppearancePanel } from '../shared/appearance-dom';
+import { applyAppearance, mountAppearancePanel, orderAppearanceRows } from '../shared/appearance-dom';
 import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
+import { mountPanelToggle } from '../shared/panel-toggle';
 import { applyDisplayMode } from '../shared/display-mode';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
@@ -39,6 +40,7 @@ const dice = createDiceController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
 mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
+mountPanelToggle(document.querySelector<HTMLButtonElement>('#panel-toggle')!);
 const t = i18n.t;
 const dieLabel = (sides: number) => t('dieLabel', { sides });
 const BACKDROP_LABELS = {
@@ -90,7 +92,24 @@ const tableBounce = mountTableBounce(document.querySelector<HTMLElement>('#appea
 const showResultText = mountShowResultText(document.querySelector<HTMLElement>('#appearance')!);
 const diceSize = mountDiceSize(document.querySelector<HTMLElement>('#appearance')!);
 const specialPipsInputs = mountSpecialPips(document.querySelector<HTMLElement>('#appearance')!);
-orderAppearanceRows(document.querySelector<HTMLElement>('#appearance')!);
+// The dice themselves first, then the result text, then the background (with the table bounce,
+// which belongs to the surface).
+orderAppearanceRows(document.querySelector<HTMLElement>('#appearance')!, [
+  'diceSize',
+  'dieColor',
+  'pipColor',
+  'specialPips',
+  'specialPipsFaces',
+  'specialPipsColor',
+  'showResultText',
+  'fontFamily',
+  'fontSize',
+  'textColor',
+  'backdrop',
+  'backdropColor',
+  'backdropImageUrl',
+  'tableBounce',
+]);
 const presetPanel = mountPresetPanel(dice, i18n);
 const sharePanel = mountSharePanel(i18n, (options) => dice.shareLink(options));
 mountSettingsFilePanel(i18n, {
@@ -423,31 +442,6 @@ function mountBackdrop(heading: HTMLElement): { update(appearance: DiceAppearanc
       image.label.hidden = backdrop !== 'image';
     },
   };
-}
-
-/**
- * Puts the appearance rows in their reading order: the dice themselves first, then the result text,
- * then the background (with the table bounce, which belongs to the surface).
- */
-function orderAppearanceRows(container: HTMLElement) {
-  const order = [
-    'diceSize',
-    'dieColor',
-    'pipColor',
-    'specialPips',
-    'specialPipsFaces',
-    'specialPipsColor',
-    'showResultText',
-    'fontFamily',
-    'fontSize',
-    'textColor',
-    'backdrop',
-    'backdropColor',
-    'backdropImageUrl',
-    'tableBounce',
-  ];
-  const rows = order.map((name) => container.querySelector<HTMLElement>(`[data-appearance-row="${name}"]`)!);
-  container.append(...rows);
 }
 
 /** three.js throws when no WebGL context can be created; the dice then roll as flat tiles. */

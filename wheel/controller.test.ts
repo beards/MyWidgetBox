@@ -281,7 +281,6 @@ describe('wheel Settings, Presets and Share link', () => {
     fontFamily: 'Georgia, serif',
     fontSize: 28,
     textColor: '#eeeeee',
-    scale: 1.25,
     labelColor: '#000000',
     pointerColor: '#ff0000',
     labelDirection: 'along',

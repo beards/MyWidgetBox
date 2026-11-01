@@ -1,4 +1,4 @@
-import { type ScaledAppearance, isHexColor, isScaledAppearance, scaledAppearanceDefaults } from '../shared/appearance';
+import { type Appearance, appearanceDefaults, isAppearance, isHexColor } from '../shared/appearance';
 import {
   type AnimationSettings,
   MAX_ANIMATION_DURATION,
@@ -55,7 +55,7 @@ export interface Sector {
 }
 
 /** The shared appearance baseline plus the wheel's own items. */
-export interface WheelAppearance extends ScaledAppearance {
+export interface WheelAppearance extends Appearance {
   /** `#rrggbb` color of the sector labels. */
   labelColor: string;
   /** `#rrggbb` color of the pointer. */
@@ -207,7 +207,7 @@ export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
   // Fields added later need no version bump: missing ones are filled from these defaults.
   defaults: {
     entries: defaultEntries,
-    appearance: { ...scaledAppearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20, resultTextSize: 12 },
+    appearance: { ...appearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20, resultTextSize: 12 },
     animation: { duration: 5000, alwaysFull: false },
     removeAfterDraw: false,
     sound: soundDefaults,
@@ -262,7 +262,7 @@ function isWheelAppearance(value: unknown): value is WheelAppearance {
   const { labelColor, pointerColor, labelDirection, limitLabelSize, maxLabelSize, resultTextSize } = (value ??
     {}) as Partial<WheelAppearance>;
   return (
-    isScaledAppearance(value) &&
+    isAppearance(value) &&
     isHexColor(labelColor) &&
     isHexColor(pointerColor) &&
     LABEL_DIRECTIONS.includes(labelDirection as LabelDirection) &&
