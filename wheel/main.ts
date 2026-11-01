@@ -46,6 +46,12 @@ const display = $('#display');
 const spinButton = $<HTMLButtonElement>('#spin');
 const resetButton = $<HTMLButtonElement>('#reset');
 const entryList = $<HTMLOListElement>('#entries');
+// Fine mode makes the weight stepper buttons move by 0.1 instead of 1. View-only, not saved.
+const fineStep = $<HTMLInputElement>('#fine-step');
+fineStep.addEventListener('change', () => {
+  renderedEntries = null;
+  render(wheel.getState());
+});
 const addEntryButton = $<HTMLButtonElement>('#add-entry');
 const historyList = $<HTMLOListElement>('#history');
 const durationInput = $<HTMLInputElement>('#duration');
@@ -235,6 +241,26 @@ function renderEntries(entries: WheelEntry[], drawn: Set<string>) {
       weight.step = 'any';
       weight.value = String(entry.weight);
       weight.addEventListener('change', () => edit(() => wheel.updateEntry(entry.id, { weight: weight.valueAsNumber })));
+      const stepper = document.createElement('span');
+      stepper.className = 'wheel__stepper';
+      const delta = fineStep.checked ? 0.1 : 1;
+      const step = (sign: 1 | -1) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = sign > 0 ? '+' : '−';
+        button.setAttribute('aria-label', t('stepWeight', { n, delta: `${sign > 0 ? '+' : '−'}${delta}` }));
+        button.dataset.step = `${entry.id}:${sign}`;
+        // Rounded so repeated 0.1 steps do not drift into float noise.
+        const next = Math.round((entry.weight + sign * delta) * 1e6) / 1e6;
+        button.disabled = next <= 0 || next > MAX_WEIGHT;
+        button.addEventListener('click', () => {
+          edit(() => wheel.updateEntry(entry.id, { weight: next }));
+          // The list is rebuilt on every edit; keep focus on the same button.
+          entryList.querySelector<HTMLButtonElement>(`[data-step="${button.dataset.step}"]`)?.focus();
+        });
+        return button;
+      };
+      stepper.append(step(-1), weight, step(1));
       const chance = document.createElement('span');
       chance.className = 'wheel__chance';
       chance.textContent = isDrawn ? t('drawn') : t('entryChance', { percent: formatPercent((entry.weight / total) * 100) });
@@ -244,7 +270,7 @@ function renderEntries(entries: WheelEntry[], drawn: Set<string>) {
       remove.setAttribute('aria-label', t('removeEntry', { n }));
       remove.disabled = entries.length === 1;
       remove.addEventListener('click', () => wheel.removeEntry(entry.id));
-      item.append(color, label, weight, chance, remove);
+      item.append(color, label, stepper, chance, remove);
       return item;
     }),
   );

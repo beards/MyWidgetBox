@@ -12,6 +12,8 @@ export type WheelMessageKey =
   | 'entryWeight'
   | 'entryColor'
   | 'entryChance'
+  | 'stepWeight'
+  | 'fineStep'
   | 'removeEntry'
   | 'animationDuration'
   | 'seconds'
@@ -73,6 +75,8 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     entryWeight: 'Weight of entry {n}',
     entryColor: 'Color of entry {n}',
     entryChance: '{percent}%',
+    stepWeight: 'Weight of entry {n} {delta}',
+    fineStep: 'Fine-tune weights (buttons ±0.1)',
     removeEntry: 'Remove entry {n}',
     animationDuration: 'Spin length',
     seconds: '{seconds} s',
@@ -133,6 +137,8 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     entryWeight: '選項 {n} 的權重',
     entryColor: '選項 {n} 的顏色',
     entryChance: '{percent}%',
+    stepWeight: '選項 {n} 的權重 {delta}',
+    fineStep: '微調權重比例（按鈕 ±0.1）',
     removeEntry: '移除選項 {n}',
     animationDuration: '轉動長度',
     seconds: '{seconds} 秒',

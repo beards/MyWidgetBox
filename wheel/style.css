@@ -150,11 +150,34 @@ body {
 
 .wheel__entries input[type='text'] {
   flex: 1;
-  min-width: 6rem;
+  min-width: 4rem;
 }
 
 .wheel__entries input[type='number'] {
-  width: 4.5rem;
+  box-sizing: border-box;
+  width: 3rem;
+  text-align: center;
+  appearance: textfield;
+}
+
+/* The stepper buttons replace the native spinner so fine mode can switch their step. */
+.wheel__entries input[type='number']::-webkit-inner-spin-button,
+.wheel__entries input[type='number']::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.wheel__stepper {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  gap: 0.125rem;
+}
+
+.wheel__stepper button {
+  min-width: 1.5rem;
+  padding: 0 0.25rem;
+  cursor: pointer;
 }
 
 .wheel__entries input[type='color'] {
