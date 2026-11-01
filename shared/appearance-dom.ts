@@ -86,14 +86,18 @@ export interface AppearancePanel<A> {
   update(appearance: A): void;
 }
 
-/** Suggestions for the font input; any installed font family can be typed. */
-const FONT_SUGGESTIONS = [
-  'system-ui, sans-serif',
-  'Georgia, serif',
-  'ui-monospace, monospace',
-  'ui-rounded, "Arial Rounded MT Bold", sans-serif',
-  '"Noto Sans TC", sans-serif',
-  'Impact, sans-serif',
+/**
+ * The fonts offered in the font menu: each lists a font built into Windows 11 and one built into macOS
+ * (where they differ), then the generic family as the fallback elsewhere (Linux, Android). No `ui-*`
+ * families: Chromium does not support them. Any installed font can be typed under Custom.
+ */
+const FONT_CHOICES: { value: string; label: AppearanceMessageKey }[] = [
+  { value: 'Georgia, "Times New Roman", serif', label: 'fontSerif' },
+  { value: 'Consolas, Menlo, monospace', label: 'fontMonospace' },
+  { value: 'Impact, sans-serif', label: 'fontImpact' },
+  { value: '"Microsoft JhengHei", "PingFang TC", sans-serif', label: 'fontChineseSans' },
+  // PMingLiU is an optional Windows feature, installed with Traditional Chinese.
+  { value: 'PMingLiU, "Songti TC", serif', label: 'fontChineseSerif' },
 ];
 
 const BACKGROUND_LABELS: Record<BackgroundKind, AppearanceMessageKey> = {
@@ -210,17 +214,46 @@ export function mountAppearancePanel<A extends PanelAppearance>(
     });
   }
 
-  const fontFamily = input('text', { list: 'appearance-fonts', maxlength: String(MAX_FONT_FAMILY_LENGTH) });
-  const fonts = document.createElement('datalist');
-  fonts.id = 'appearance-fonts';
-  fonts.append(...FONT_SUGGESTIONS.map((font) => new Option(font)));
-  relabels.push(() => (fontFamily.placeholder = t('fontFamilyDefault')));
-  row('fontFamily', () => t('fontFamily'), fontFamily, fonts);
+  // A menu rather than a text box with suggestions: those only list fonts matching what is typed,
+  // so after picking one the others were hidden until the box was cleared.
+  const CUSTOM_FONT = 'custom';
+  const fontMenu = document.createElement('select');
+  const fontFamily = input('text', { maxlength: String(MAX_FONT_FAMILY_LENGTH), spellcheck: 'false' });
+  /** Custom was picked; stays on (with the typed text) until a listed font or the default is picked. */
+  let customFont = false;
+  relabels.push(() => {
+    fontMenu.replaceChildren(
+      new Option(t('fontFamilyDefault'), ''),
+      ...FONT_CHOICES.map(({ value, label }) => {
+        const option = new Option(t(label), value);
+        option.style.fontFamily = value;
+        return option;
+      }),
+      new Option(t('fontFamilyCustom'), CUSTOM_FONT),
+    );
+    syncFont();
+  });
+  row('fontFamily', () => t('fontFamily'), fontMenu, fontFamily);
+  fontMenu.addEventListener('change', () => {
+    if (!current) return;
+    customFont = fontMenu.value === CUSTOM_FONT;
+    if (customFont) {
+      syncFont();
+      fontFamily.focus();
+    } else onChange({ ...current, fontFamily: fontMenu.value });
+  });
   bind(
     fontFamily,
     (element, appearance) => ({ ...appearance, fontFamily: element.value }),
     (element, appearance) => (element.value = appearance.fontFamily),
   );
+  function syncFont() {
+    const value = current?.fontFamily ?? '';
+    const listed = value === '' || FONT_CHOICES.some((font) => font.value === value);
+    fontMenu.value = customFont || !listed ? CUSTOM_FONT : value;
+    fontFamily.hidden = fontMenu.value !== CUSTOM_FONT;
+  }
+  syncs.push(syncFont);
 
   const fontSize = input('range', { min: String(fontSizeRange.min), max: String(fontSizeRange.max), step: '1' });
   const fontSizeValue = document.createElement('output');

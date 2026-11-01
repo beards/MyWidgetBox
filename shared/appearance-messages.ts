@@ -11,6 +11,12 @@ export type AppearanceMessageKey =
   | 'imageUrl'
   | 'fontFamily'
   | 'fontFamilyDefault'
+  | 'fontFamilyCustom'
+  | 'fontSerif'
+  | 'fontMonospace'
+  | 'fontImpact'
+  | 'fontChineseSans'
+  | 'fontChineseSerif'
   | 'fontSize'
   | 'textColor'
   | 'scale'
@@ -28,6 +34,12 @@ export const appearanceMessages: MessageTables<AppearanceMessageKey> = {
     imageUrl: 'Image URL',
     fontFamily: 'Font',
     fontFamilyDefault: 'Default',
+    fontFamilyCustom: 'Custom…',
+    fontSerif: 'Serif',
+    fontMonospace: 'Monospace',
+    fontImpact: 'Impact',
+    fontChineseSans: 'Chinese sans-serif',
+    fontChineseSerif: 'Chinese serif',
     fontSize: 'Text size',
     textColor: 'Text color',
     scale: 'Scale',
@@ -44,6 +56,12 @@ export const appearanceMessages: MessageTables<AppearanceMessageKey> = {
     imageUrl: '圖片網址',
     fontFamily: '字型',
     fontFamilyDefault: '預設',
+    fontFamilyCustom: '自訂…',
+    fontSerif: '襯線',
+    fontMonospace: '等寬',
+    fontImpact: 'Impact',
+    fontChineseSans: '中文黑體',
+    fontChineseSerif: '中文明體',
     fontSize: '文字大小',
     textColor: '文字顏色',
     scale: '縮放',
