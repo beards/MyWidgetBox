@@ -5,6 +5,7 @@ import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { mountPanelToggle } from '../shared/panel-toggle';
+import { mountThemeSwitcher } from '../shared/theme-dom';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
 import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
@@ -36,6 +37,7 @@ const wheel = createWheelController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
 mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
+mountThemeSwitcher(i18n, env.storage, document.querySelector<HTMLElement>('#language')!);
 mountPanelToggle(document.querySelector<HTMLButtonElement>('#panel-toggle')!);
 const t = i18n.t;
 

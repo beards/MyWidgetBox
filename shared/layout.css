@@ -18,8 +18,9 @@
  * give the display the whole width, narrow screens fold the panel to its header row at the bottom.
  */
 html {
-  /* An opaque panel color, so the controls look the same over any appearance background. */
-  --layout-panel-color: #eaf0ed;
+  /* An opaque panel color from the theme (shared/theme.css), so the controls look the same over
+     any appearance background. */
+  --layout-panel-color: var(--theme-surface);
 }
 
 .layout__stage {
@@ -36,12 +37,14 @@ html {
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
   background: var(--layout-panel-color);
-  color: #222;
+  color: var(--theme-text);
+  font-family: var(--theme-font);
 }
 
-.layout__panel h2 {
-  margin: 0.75rem 0 0;
-  font-size: 1rem;
+/* The panel scrolls as a whole; no section shrinks to fit (a scrolling list such as the history
+   would otherwise be squeezed to nothing when the panel overflows). */
+.layout__panel > * {
+  flex-shrink: 0;
 }
 
 /* Narrow enough that the export, import and restore buttons share one row. */
@@ -88,15 +91,19 @@ html[data-panel-collapsed] .layout__panel > :not(.layout__panel-toggle) {
   display: none;
 }
 
-/* The link back to the catalog page, beside the language switcher. */
+/* The link back to the catalog page, then the language and theme switchers side by side. */
 .layout__language {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
+}
+
+.layout__language > select:first-of-type {
+  margin-left: auto;
 }
 
 .layout__home {
-  color: inherit;
+  margin-right: 0.5rem;
 }
 
 @media (min-width: 56.25em) {
@@ -174,7 +181,8 @@ html[data-panel-collapsed] .layout__panel > :not(.layout__panel-toggle) {
     translate: 0 -50%;
     border-radius: 0.5rem 0 0 0.5rem;
     background: var(--layout-panel-color);
-    box-shadow: -2px 0 4px rgb(0 0 0 / 0.15);
+    border-right: 1px solid var(--theme-border);
+    box-shadow: -2px 0 6px rgb(0 0 0 / 0.12);
   }
 
   html:not([data-display]) .layout__panel-toggle-label {
@@ -202,11 +210,13 @@ html[data-panel-collapsed] .layout__panel > :not(.layout__panel-toggle) {
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     width: var(--layout-panel-width);
     height: var(--layout-bar-height);
     margin: 0;
     padding: 0 1rem;
+    border-bottom: 1px solid var(--theme-border);
     background: var(--layout-panel-color);
+    color: var(--theme-text);
+    font-family: var(--theme-font);
   }
 }

@@ -3,7 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script data-theme-boot>
+      // Sets the theme before first paint; shared/theme.ts owns the list and the storage key.
+      (function () {
+        var theme = null;
+        try {
+          theme = localStorage.getItem('mywidgetbox:theme');
+        } catch (error) {}
+        document.documentElement.dataset.theme = ['soft', 'dark', 'paper'].indexOf(theme) >= 0 ? theme : 'soft';
+      })();
+    </script>
     <title data-i18n="title"></title>
+    <link rel="stylesheet" href="../shared/theme.css" />
     <link rel="stylesheet" href="../shared/layout.css" />
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -18,7 +29,7 @@
           <p class="dice__breakdown" id="breakdown" aria-live="polite"></p>
         </div>
         <div class="dice__actions" data-controls>
-          <button type="button" class="dice__roll" id="roll" data-i18n="roll"></button>
+          <button type="button" class="dice__roll theme-primary" id="roll" data-i18n="roll"></button>
           <button type="button" id="reset" data-i18n="reset"></button>
         </div>
       </div>
@@ -92,7 +103,7 @@
           <label><input type="checkbox" id="share-display" /> <span data-i18n="shareDisplay"></span></label>
           <label><input type="checkbox" id="share-transparent" /> <span data-i18n="shareTransparent"></span></label>
           <div class="dice__share-copy">
-            <button type="button" id="share-copy" data-i18n="copyShareLink"></button>
+            <button type="button" class="theme-primary" id="share-copy" data-i18n="copyShareLink"></button>
             <span id="share-status" role="status"></span>
           </div>
           <input type="text" id="share-url" readonly data-i18n-aria-label="shareLink" />

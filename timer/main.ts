@@ -6,6 +6,7 @@ import { createBrowserEnv } from '../shared/env';
 import { createI18n } from '../shared/i18n';
 import { bindStaticText, mountLanguageSwitcher } from '../shared/i18n-dom';
 import { mountPanelToggle } from '../shared/panel-toggle';
+import { mountThemeSwitcher } from '../shared/theme-dom';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
 import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
@@ -32,6 +33,7 @@ const timer = createTimerController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
 mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
+mountThemeSwitcher(i18n, env.storage, document.querySelector<HTMLElement>('#language')!);
 mountPanelToggle(document.querySelector<HTMLButtonElement>('#panel-toggle')!);
 const t = i18n.t;
 
@@ -103,7 +105,7 @@ function createCard(id: string): TimerCard {
   actions.className = 'timer__actions';
   actions.dataset.controls = '';
   const toggle = button(() => toggleTimer(id));
-  toggle.classList.add('timer__toggle');
+  toggle.classList.add('timer__toggle', 'theme-primary');
   const reset = button(() => timer.reset(id));
   const stop = button(() => stopAlert(id));
   // The display itself is a control too (Display mode hides the buttons): a click stops a

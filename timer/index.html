@@ -3,7 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script data-theme-boot>
+      // Sets the theme before first paint; shared/theme.ts owns the list and the storage key.
+      (function () {
+        var theme = null;
+        try {
+          theme = localStorage.getItem('mywidgetbox:theme');
+        } catch (error) {}
+        document.documentElement.dataset.theme = ['soft', 'dark', 'paper'].indexOf(theme) >= 0 ? theme : 'soft';
+      })();
+    </script>
     <title data-i18n="title"></title>
+    <link rel="stylesheet" href="../shared/theme.css" />
     <link rel="stylesheet" href="../shared/layout.css" />
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -61,7 +72,7 @@
           <label><input type="checkbox" id="share-transparent" /> <span data-i18n="shareTransparent"></span></label>
           <label><span data-i18n="shareTimer"></span> <select id="share-timer"></select></label>
           <div class="timer__row">
-            <button type="button" id="share-copy" data-i18n="copyShareLink"></button>
+            <button type="button" class="theme-primary" id="share-copy" data-i18n="copyShareLink"></button>
             <span id="share-status" role="status"></span>
           </div>
           <input type="text" id="share-url" readonly data-i18n-aria-label="shareLink" />

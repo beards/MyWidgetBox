@@ -1,0 +1,303 @@
+/*
+ * Site themes (shared/theme.ts): tokens per <html data-theme>, and the look of every control in
+ * the "control scope": the Widget controls panel, anything inside an element marked data-controls
+ * (hidden in Display mode) or a button marked so itself, and the catalog page. A Widget's own display is never styled here, so Display
+ * mode looks the same in every theme.
+ *
+ * Control styles live in @layer theme, so any unlayered rule in a page's own style.css (sizes,
+ * touch targets, special buttons) wins over them without fighting specificity.
+ */
+html[data-theme='soft'] {
+  --theme-bg: #f4f6f8;
+  --theme-surface: #ffffff;
+  --theme-surface-2: #f4f6f8;
+  --theme-border: #dce2e8;
+  --theme-border-strong: #b9c3cd;
+  --theme-text: #1d2733;
+  --theme-muted: #66727f;
+  --theme-heading: #66727f;
+  --theme-accent: #2f7d6d;
+  --theme-accent-hover: #27695c;
+  --theme-accent-text: #ffffff;
+  --theme-radius: 0.5rem;
+  --theme-shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 4px 12px rgb(16 24 40 / 0.07);
+  --theme-shadow-hover: 0 2px 4px rgb(16 24 40 / 0.08), 0 10px 24px rgb(16 24 40 / 0.1);
+  --theme-font: system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --theme-heading-font: var(--theme-font);
+  --theme-scheme: light;
+}
+
+html[data-theme='dark'] {
+  --theme-bg: #121417;
+  --theme-surface: #1b1e23;
+  --theme-surface-2: #121417;
+  --theme-border: #2e333b;
+  --theme-border-strong: #474e59;
+  --theme-text: #e8e9eb;
+  --theme-muted: #9299a3;
+  --theme-heading: #f0a63a;
+  --theme-accent: #f0a63a;
+  --theme-accent-hover: #f5b75c;
+  --theme-accent-text: #1a1205;
+  --theme-radius: 0.375rem;
+  --theme-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.35);
+  --theme-shadow-hover: 0 2px 4px rgb(0 0 0 / 0.45), 0 12px 28px rgb(0 0 0 / 0.45);
+  --theme-font: system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --theme-heading-font: var(--theme-font);
+  --theme-scheme: dark;
+}
+
+html[data-theme='paper'] {
+  --theme-bg: #f6f1e7;
+  --theme-surface: #fffdf8;
+  --theme-surface-2: #faf5ea;
+  --theme-border: #ddd1bb;
+  --theme-border-strong: #b9a98c;
+  --theme-text: #2b241c;
+  --theme-muted: #7c6f5e;
+  --theme-heading: #b5482f;
+  --theme-accent: #b5482f;
+  --theme-accent-hover: #9c3c26;
+  --theme-accent-text: #fffdf8;
+  --theme-radius: 0.1875rem;
+  --theme-shadow: 0 1px 0 #e6dcc9, 0 4px 14px rgb(80 60 30 / 0.08);
+  --theme-shadow-hover: 0 1px 0 #e6dcc9, 0 10px 24px rgb(80 60 30 / 0.14);
+  --theme-font: system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --theme-heading-font: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Songti TC', 'Noto Serif TC', Georgia, serif;
+  --theme-scheme: light;
+}
+
+@layer theme {
+  :where(.layout__panel, [data-controls], .catalog) {
+    color-scheme: var(--theme-scheme);
+  }
+
+  /* Buttons, and the button inside a file input. */
+  :where(.layout__panel, [data-controls], .catalog) button,
+  button:where([data-controls]),
+  :where(.layout__panel, [data-controls], .catalog) input[type='file']::file-selector-button {
+    box-sizing: border-box;
+    padding: 0.3rem 0.75rem;
+    border: 1px solid var(--theme-border-strong);
+    border-radius: var(--theme-radius);
+    background: var(--theme-surface);
+    color: var(--theme-text);
+    font: inherit;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    transition:
+      background-color 0.15s,
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) button:hover:not(:disabled),
+  button:where([data-controls]):hover:not(:disabled),
+  :where(.layout__panel, [data-controls], .catalog) input[type='file']:hover::file-selector-button {
+    border-color: var(--theme-accent);
+    background: var(--theme-surface-2);
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) button:active:not(:disabled) {
+    translate: 0 1px;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) .theme-primary {
+    border-color: var(--theme-accent);
+    background: var(--theme-accent);
+    color: var(--theme-accent-text);
+    font-weight: 600;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) .theme-primary:hover:not(:disabled) {
+    border-color: var(--theme-accent-hover);
+    background: var(--theme-accent-hover);
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='file'] {
+    font: inherit;
+    color: var(--theme-muted);
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='file']::file-selector-button {
+    margin-right: 0.5rem;
+  }
+
+  /* Text-like fields and dropdowns. */
+  :where(.layout__panel, [data-controls], .catalog)
+    :where(input:not([type]), input[type='text'], input[type='url'], input[type='number'], input[type='search'], input[type='time'], textarea, select) {
+    box-sizing: border-box;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius);
+    background-color: var(--theme-surface-2);
+    color: var(--theme-text);
+    font: inherit;
+    transition: border-color 0.15s;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog)
+    :where(input:not([type]), input[type='text'], input[type='url'], input[type='number'], input[type='search'], input[type='time'], textarea, select):hover:not(:disabled) {
+    border-color: var(--theme-border-strong);
+  }
+
+  /* A drawn chevron, in the text color, so the dropdown matches the theme. */
+  :where(.layout__panel, [data-controls], .catalog) select {
+    appearance: none;
+    padding-right: 1.75rem;
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position:
+      calc(100% - 0.85rem) 55%,
+      calc(100% - 0.55rem) 55%;
+    background-size: 0.3rem 0.3rem;
+    background-repeat: no-repeat;
+    cursor: pointer;
+  }
+
+  /* Checkboxes: a rounded box, filled with the accent and a drawn tick when checked. */
+  :where(.layout__panel, [data-controls], .catalog) input[type='checkbox'] {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    flex: none;
+    box-sizing: border-box;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    border: 1.5px solid var(--theme-border-strong);
+    border-radius: calc(var(--theme-radius) * 0.6);
+    background: var(--theme-surface-2);
+    cursor: pointer;
+    transition:
+      background-color 0.15s,
+      border-color 0.15s;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='checkbox']::before {
+    content: '';
+    width: 0.6rem;
+    height: 0.6rem;
+    background: var(--theme-accent-text);
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+    scale: 0;
+    transition: scale 0.1s;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='checkbox']:checked {
+    border-color: var(--theme-accent);
+    background: var(--theme-accent);
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='checkbox']:checked::before {
+    scale: 1;
+  }
+
+  /* Sliders: a thin track and an accent thumb. */
+  :where(.layout__panel, [data-controls], .catalog) input[type='range'] {
+    appearance: none;
+    height: 1.25rem;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='range']::-webkit-slider-runnable-track {
+    height: 0.25rem;
+    border-radius: 0.25rem;
+    background: var(--theme-border);
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='range']::-webkit-slider-thumb {
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin-top: -0.375rem;
+    border: 2px solid var(--theme-surface);
+    border-radius: 50%;
+    background: var(--theme-accent);
+    box-shadow: 0 0 0 1px var(--theme-accent);
+  }
+
+  /* Color pickers: the chosen color as a rounded swatch inside a field-like frame. */
+  :where(.layout__panel, [data-controls], .catalog) input[type='color'] {
+    appearance: none;
+    box-sizing: border-box;
+    width: 2rem;
+    height: 2rem;
+    padding: 0.1875rem;
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius);
+    background: var(--theme-surface-2);
+    cursor: pointer;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='color']::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) input[type='color']::-webkit-color-swatch {
+    border: none;
+    border-radius: calc(var(--theme-radius) * 0.6);
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) :where(button, input, select, textarea, a):focus-visible {
+    outline: 2px solid var(--theme-accent);
+    outline-offset: 2px;
+  }
+
+  :where(.layout__panel, [data-controls], .catalog) :where(button, input, select, textarea):disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* An empty status line (import error, shake status) takes no room. */
+  .layout__panel p:empty {
+    margin: 0;
+  }
+
+  /* Section headings of the controls panel: small, spaced capitals under a hairline. */
+  .layout__panel h2 {
+    margin: 0.75rem 0 0;
+    padding-top: 0.875rem;
+    border-top: 1px solid var(--theme-border);
+    color: var(--theme-heading);
+    font-family: var(--theme-heading-font);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* The first section needs no rule above it. */
+  .layout__panel > h2:first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  /* The link back to the catalog: a chip like the switchers beside it, readable over any
+     appearance background (narrow screens put it straight on the Widget's page). */
+  .layout__language .layout__home {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius);
+    background: var(--theme-surface);
+    color: var(--theme-text);
+    text-decoration: none;
+  }
+
+  .layout__panel a,
+  .layout__language a {
+    color: inherit;
+    text-decoration-color: var(--theme-border-strong);
+    text-underline-offset: 0.2em;
+  }
+
+  .layout__panel a:hover,
+  .layout__language a:hover {
+    color: var(--theme-accent);
+  }
+}
