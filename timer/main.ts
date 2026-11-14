@@ -19,6 +19,7 @@ import {
   type TimerView,
   createTimerController,
   formatTimer,
+  frameKey,
   readAlert,
   readTimer,
   visibleTimers,
@@ -160,7 +161,7 @@ function createCard(id: string): TimerCard {
 
   const card: TimerCard = {
     root,
-    // Runs every frame: each write is skipped when the DOM already shows that value.
+    // Runs on frames where the shown value can change (see frame): each write is skipped when the DOM already shows that value.
     tick(view, now) {
       const reading = readTimer(view, now);
       setText(value, formatTimer(view, now, { showFraction: timer.getState().showFraction }));
@@ -294,9 +295,21 @@ function render(state: TimerState) {
 
 // The shown value is computed from the clock on every frame, so throttled or hidden tabs
 // never drift; only the text that changed is touched. Alerts are checked on an interval.
+// A card is only ticked when its frame key, alert sound or the State changed since the last frame.
+const frameKeys = new Map<string, string>();
+let framedState: TimerState | null = null;
 function frame() {
   const now = env.now();
-  for (const view of timer.getState().timers) cards.get(view.id)?.tick(view, now);
+  const state = timer.getState();
+  const stateChanged = state !== framedState;
+  framedState = state;
+  for (const view of state.timers) {
+    const card = cards.get(view.id);
+    if (!card) continue;
+    const key = `${frameKey(view, now, state)} ${alertSounds.has(view.id)}`;
+    if (stateChanged || frameKeys.get(view.id) !== key) card.tick(view, now);
+    frameKeys.set(view.id, key);
+  }
   requestAnimationFrame(frame);
 }
 

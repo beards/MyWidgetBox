@@ -350,15 +350,38 @@ export function wantsWakeLock(timers: TimerView[], now: number): boolean {
  */
 export function formatTimer(timer: TimerView, now: number, options: { showFraction?: boolean } = {}): string {
   const { value } = readTimer(timer, now);
-  // Rounded in the unit of the last digit shown: seconds, or hundredths with showFraction.
   const unit = options.showFraction ? 10 : 1000;
-  const units = timer.mode !== 'stopwatch' ? Math.ceil(value / unit) : Math.floor(value / unit);
+  const units = shownUnits(timer, value, unit);
   const total = Math.floor((units * unit) / 1000);
   const pad = (n: number) => String(n).padStart(2, '0');
   const hours = Math.floor(total / 3600);
   const rest = `${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
   const fraction = options.showFraction ? `.${pad(units % 100)}` : '';
   return (hours > 0 ? `${pad(hours)}:${rest}` : rest) + fraction;
+}
+
+/** The value in the unit of the last digit shown: a countdown rounds up, a stopwatch rounds down. */
+function shownUnits(timer: TimerView, value: number, unit: number): number {
+  return timer.mode !== 'stopwatch' ? Math.ceil(value / unit) : Math.floor(value / unit);
+}
+
+/**
+ * A cheap key of what a timer shows at `now` (its formatTimer text, status and alert effect):
+ * it changes whenever any of them does, so a view can skip frames where it stays the same.
+ * Only the clock is covered; a change of the timer or the options needs its own redraw.
+ */
+export function frameKey(
+  timer: TimerView,
+  now: number,
+  options: { showFraction?: boolean; alert: TimerAlertSettings },
+): string {
+  // A stopped countdown or stopwatch shows the same until its State changes.
+  if (timer.mode !== 'targetTime' && timer.run.startedAt === null) return 'stopped';
+  const { value, status } = readTimer(timer, now);
+  const units = shownUnits(timer, value, options.showFraction ? 10 : 1000);
+  // The effect can only show once time is up.
+  const effect = status === 'timeUp' && readAlert(timer, now, options.alert).effect;
+  return `${status} ${units} ${effect}`;
 }
 
 /**

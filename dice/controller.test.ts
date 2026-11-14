@@ -561,6 +561,20 @@ describe('dice appearance Settings', () => {
     expect(seen).toEqual([custom]);
   });
 
+  // The view skips rebuilding the dice set list and the history while these stay the same objects.
+  it('keeps the dice set and history unchanged objects when only the appearance changes', () => {
+    const dice = createDiceController(createTestEnv({ random: [0] }));
+    rollAndFinish(dice);
+    const { diceSet, history } = dice.getState();
+
+    dice.setAppearance({ ...dice.getState().appearance, diceSize: 1.5 });
+    expect(dice.getState().diceSet).toBe(diceSet);
+    expect(dice.getState().history).toBe(history);
+
+    dice.setCount(6, 2);
+    expect(dice.getState().diceSet.groups).not.toBe(diceSet.groups);
+  });
+
   it('keeps the appearance after a reload', () => {
     const env = createTestEnv();
     createDiceController(env).setAppearance(custom);

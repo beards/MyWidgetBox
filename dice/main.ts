@@ -63,6 +63,15 @@ const addSides = $<HTMLSelectElement>('#add-sides');
 const addButton = $<HTMLButtonElement>('#add-die');
 const modifierInput = $<HTMLInputElement>('#modifier');
 const historyList = $<HTMLOListElement>('#history');
+/**
+ * What the background, the dice set list and the history were last drawn from, so a render redraws
+ * them only when it changes (dragging a slider renders on every input event). Cleared to redraw anyway.
+ */
+let shownBackground = '';
+let shownGroups: DiceSet['groups'] | null = null;
+let shownHistory: { history: DiceOutcome[]; animating: boolean } | null = null;
+/** applyAppearance's page target while the background is unchanged, so it does not repaint the page. */
+const unchangedPage = document.createElement('div');
 const resetButton = $<HTMLButtonElement>('#reset');
 const skipInput = $<HTMLInputElement>('#skip-animation');
 const alwaysFullInput = $<HTMLInputElement>('#always-full');
@@ -131,8 +140,13 @@ function renderAddSides() {
 
 function render(state: DiceState) {
   const { diceSet, appearance, outcome, history, animating } = state;
+  // The felt pattern is a large data URL, so the page background is only repainted when it changes.
+  const background = JSON.stringify(appearance.background);
+  const backgroundChanged = background !== shownBackground;
+  shownBackground = background;
+  const page = backgroundChanged ? document.documentElement : unchangedPage;
   // The text settings apply to the result text; the dice size is the scene's own (no CSS zoom, which blurs the 3D stage).
-  applyAppearance(appearance, { page: document.documentElement, display: breakdown }, { forceTransparent: displayOptions.transparent });
+  applyAppearance(appearance, { page, display: breakdown }, { forceTransparent: displayOptions.transparent });
   scene.setDiceSize(appearance.diceSize);
   breakdown.hidden = !appearance.showResultText;
   breakdown.style.setProperty('--result-outline', resultOutline(appearance.textColor));
@@ -146,8 +160,10 @@ function render(state: DiceState) {
   // With a transparent background only the dice and their shadows show (e.g. over a stream in OBS).
   const transparent = displayOptions.transparent || appearance.background.kind === 'transparent';
   // The felt fills the whole page, so the dice area has no visible edge; the dice cast shadows on any background.
-  if (!transparent && appearance.background.kind === 'felt') paintFelt(document.documentElement, appearance.background.color);
-  else clearFelt(document.documentElement);
+  if (backgroundChanged) {
+    if (!transparent && appearance.background.kind === 'felt') paintFelt(page, appearance.background.color);
+    else clearFelt(page);
+  }
   appearancePanel.update(appearance);
   backdropInputs.update(appearance);
   if (document.activeElement !== tableBounce.input) tableBounce.input.value = String(appearance.tableBounce);
@@ -184,8 +200,17 @@ function render(state: DiceState) {
   // Follows the Settings in effect, so a Preset switch or an import turns listening on or off.
   syncShakes(state.shakeToRoll);
 
+  if (diceSet.groups !== shownGroups) renderGroups(diceSet.groups);
+
+  sharePanel.refresh();
+
+  if (history !== shownHistory?.history || animating !== shownHistory.animating) renderHistory(history, animating);
+}
+
+function renderGroups(groups: DiceSet['groups']) {
+  shownGroups = groups;
   groupList.replaceChildren(
-    ...diceSet.groups.map(({ sides, count }) => {
+    ...groups.map(({ sides, count }) => {
       const label = dieLabel(sides);
       const item = document.createElement('li');
       const countInput = document.createElement('input');
@@ -201,15 +226,16 @@ function render(state: DiceState) {
       remove.type = 'button';
       remove.textContent = '×';
       remove.setAttribute('aria-label', t('removeDie', { label }));
-      remove.disabled = diceSet.groups.length === 1;
+      remove.disabled = groups.length === 1;
       remove.addEventListener('click', () => dice.removeDie(sides));
       item.append(countInput, name, remove);
       return item;
     }),
   );
+}
 
-  sharePanel.refresh();
-
+function renderHistory(history: DiceOutcome[], animating: boolean) {
+  shownHistory = { history, animating };
   // While animating, the newest entry would give the Outcome away before the dice land.
   historyList.replaceChildren(
     ...history.slice(animating ? 1 : 0).map((entry) => {
@@ -464,6 +490,8 @@ function restingDice({ groups }: DiceSet) {
 /** Runs an edit, then re-renders so inputs holding a value the controller rejected snap back. */
 function edit(action: () => void) {
   action();
+  // A rejected count leaves the dice set as it was, so the list is redrawn anyway.
+  shownGroups = null;
   render(dice.getState());
 }
 
@@ -523,6 +551,8 @@ function syncShakes(wanted: boolean) {
 dice.subscribe(render);
 i18n.subscribe(() => {
   renderAddSides();
+  // The list's labels are in the language.
+  shownGroups = null;
   render(dice.getState());
 });
 renderAddSides();

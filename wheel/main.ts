@@ -75,6 +75,9 @@ let playing: WheelOutcome | null = null;
 let renderedEntries: WheelEntry[] | null = null;
 let renderedDrawn: string[] | null = null;
 let renderedWheel: WheelEntry[] | null = null;
+let renderedHistory: { history: WheelOutcome[]; animating: boolean } | null = null;
+/** What the result pop-up text was last sized for, so it is re-fitted only when that changes. */
+let fittedResult: string | null = null;
 let resultTimer = 0;
 
 const appearancePanel = mountAppearancePanel<WheelAppearance>($('#appearance'), {
@@ -138,8 +141,12 @@ function showResult(outcome: WheelOutcome) {
 function fitResult() {
   if (result.hidden) return;
   const diameter = scene.diameter();
+  const { fontFamily, resultTextSize } = wheel.getState().appearance;
+  const fitKey = JSON.stringify([fontFamily, resultTextSize, result.textContent, diameter]);
+  if (fitKey === fittedResult) return;
+  fittedResult = fitKey;
   result.style.maxWidth = `${diameter}px`;
-  const size = largestFitting((diameter * wheel.getState().appearance.resultTextSize) / 100, (candidate) => {
+  const size = largestFitting((diameter * resultTextSize) / 100, (candidate) => {
     result.style.fontSize = `${candidate}px`;
     return result.offsetHeight <= diameter && result.scrollWidth <= result.clientWidth;
   });
@@ -149,6 +156,7 @@ function fitResult() {
 function hideResult() {
   clearTimeout(resultTimer);
   result.hidden = true;
+  fittedResult = null;
 }
 
 function render(state: WheelState) {
@@ -158,7 +166,7 @@ function render(state: WheelState) {
   result.style.color = appearance.labelColor;
   appearancePanel.update(appearance);
   labelOptions.update(appearance);
-  // Font and size changes apply to a pop-up already shown.
+  // Font and size changes apply to a pop-up already shown (it is re-fitted only when they change).
   fitResult();
 
   // Drawn entries are hidden from the wheel (it shows only what can still be drawn) and marked in the editor.
@@ -209,16 +217,19 @@ function render(state: WheelState) {
   sharePanel.refresh();
 
   // While spinning, the newest entry would give the Outcome away before the wheel stops.
-  historyList.replaceChildren(
-    ...history.slice(animating ? 1 : 0).map((entry) => {
-      const item = document.createElement('li');
-      const swatch = document.createElement('span');
-      swatch.className = 'wheel__swatch';
-      swatch.style.backgroundColor = entry.color;
-      item.append(swatch, entry.label);
-      return item;
-    }),
-  );
+  if (history !== renderedHistory?.history || animating !== renderedHistory.animating) {
+    renderedHistory = { history, animating };
+    historyList.replaceChildren(
+      ...history.slice(animating ? 1 : 0).map((entry) => {
+        const item = document.createElement('li');
+        const swatch = document.createElement('span');
+        swatch.className = 'wheel__swatch';
+        swatch.style.backgroundColor = entry.color;
+        item.append(swatch, entry.label);
+        return item;
+      }),
+    );
+  }
 }
 
 function renderEntries(entries: WheelEntry[], drawn: Set<string>) {
@@ -305,6 +316,11 @@ render(wheel.getState());
 
 stage.addEventListener('click', () => wheel.spin());
 new ResizeObserver(fitResult).observe(stage);
+// A web font finishing loading changes the text's size without changing what it was fitted for.
+document.fonts.addEventListener('loadingdone', () => {
+  fittedResult = null;
+  fitResult();
+});
 result.addEventListener('click', hideResult);
 spinButton.addEventListener('click', () => wheel.spin());
 resetButton.addEventListener('click', () => wheel.reset());

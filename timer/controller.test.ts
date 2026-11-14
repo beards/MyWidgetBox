@@ -6,6 +6,7 @@ import {
   TIMER_STATE_KEY,
   createTimerController,
   formatTimer,
+  frameKey,
   readAlert,
   readTimer,
   visibleTimers,
@@ -817,5 +818,78 @@ describe('alert and sound Settings', () => {
     const shared = open(createTestEnv({ url: timer.shareLink() })).timer.getState();
     expect(shared.alert).toEqual({ soundSeconds: 3, effectSeconds: 0 });
     expect(shared.sound.enabled).toBe(false);
+  });
+});
+
+describe('frame key', () => {
+  type Opened = ReturnType<typeof setup>;
+  const shown = ({ env, timer, first }: Opened, showFraction: boolean) =>
+    [
+      formatTimer(first(), env.now(), { showFraction }),
+      readTimer(first(), env.now()).status,
+      readAlert(first(), env.now(), timer.getState().alert).effect,
+    ].join(' ');
+  const key = ({ env, timer, first }: Opened, showFraction: boolean) =>
+    frameKey(first(), env.now(), { showFraction, alert: timer.getState().alert });
+
+  /** Steps the clock 1 ms at a time for span; every change on screen must come with a new key. */
+  function countKeyedChanges(opened: Opened, span: number, showFraction = false) {
+    let lastShown = shown(opened, showFraction);
+    let lastKey = key(opened, showFraction);
+    let changes = 0;
+    for (let ms = 1; ms <= span; ms++) {
+      opened.env.advance(1);
+      const nowShown = shown(opened, showFraction);
+      const nowKey = key(opened, showFraction);
+      if (nowShown !== lastShown) {
+        changes++;
+        expect(nowKey, `at +${ms} ms: ${lastShown} -> ${nowShown}`).not.toBe(lastKey);
+      }
+      lastShown = nowShown;
+      lastKey = nowKey;
+    }
+    return changes;
+  }
+
+  it('stays the same while a timer is idle or paused', () => {
+    const opened = setup();
+    const { env, timer, id } = opened;
+    const idle = key(opened, true);
+    env.advance(HOUR);
+    expect(key(opened, true)).toBe(idle);
+    timer.start(id);
+    env.advance(2 * SECOND);
+    timer.pause(id);
+    const paused = key(opened, true);
+    env.advance(HOUR);
+    expect(key(opened, true)).toBe(paused);
+  });
+
+  it('changes with every shown second and the time up of a running countdown, until its effect ends', () => {
+    const opened = setup();
+    opened.timer.setDuration(opened.id, 10 * SECOND);
+    opened.timer.start(opened.id);
+    // 00:09 to 00:01, then 00:00 with time up and its effect, then the effect ends.
+    expect(countKeyedChanges(opened, 25 * SECOND)).toBe(11);
+  });
+
+  it('changes with every shown hundredth when fractional seconds are on', () => {
+    const opened = setup();
+    opened.timer.setMode(opened.id, 'stopwatch');
+    opened.timer.start(opened.id);
+    expect(countKeyedChanges(opened, 2 * SECOND, true)).toBe(200);
+  });
+
+  it('follows a countdown to a time of day through time up, its effect, and on to the next day', () => {
+    const before = setup({ now: at(15, 20, 59, 50) });
+    before.timer.setMode(before.id, 'targetTime');
+    before.timer.setTarget(before.id, '21:00');
+    // 00:09 to 00:01, then time up with its effect, then the effect ends.
+    expect(countKeyedChanges(before, 20 * SECOND)).toBe(11);
+    const after = setup({ now: at(15, 21, 59, 55) });
+    after.timer.setMode(after.id, 'targetTime');
+    after.timer.setTarget(after.id, '21:00');
+    // Time up shows for an hour, then it counts down to the next day: 23:00:00 to 22:59:55.
+    expect(countKeyedChanges(after, 10 * SECOND)).toBe(6);
   });
 });
