@@ -1,6 +1,6 @@
 # 全站 Theme 與首頁改版
 
-Status: needs-triage
+Status: resolved
 
 ## 意圖與原因
 

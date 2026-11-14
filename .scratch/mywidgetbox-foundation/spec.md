@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Spec：MyWidgetBox 基礎建設與首批 Widget（骰子、轉盤、計時器）
 
