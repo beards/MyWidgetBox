@@ -28,6 +28,10 @@ export function createFallbackDiceScene(container: HTMLElement): DiceScene {
     show(rolls) {
       if (timer === 0) draw(rolls, false);
     },
+    stop() {
+      window.clearTimeout(timer);
+      timer = 0;
+    },
     play(rolls, { animation }, onDone, onImpact) {
       window.clearTimeout(timer);
       timer = 0;

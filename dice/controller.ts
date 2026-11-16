@@ -129,7 +129,7 @@ export interface DiceState {
   outcome: DiceOutcome | null;
   /** The most recent Outcomes, newest first, at most HISTORY_LIMIT; kept in memory only. */
   history: DiceOutcome[];
-  /** True from a roll until the view reports its animation finished (never with skipAnimation); rolls are ignored meanwhile. */
+  /** True from a roll until the view reports its animation finished (never with skipAnimation) or a reset stops it; rolls are ignored meanwhile. */
   animating: boolean;
   /** The animation Settings in effect (see DiceAnimationSettings). */
   skipAnimation: boolean;
@@ -157,7 +157,7 @@ export interface DiceController {
   roll(): void;
   /** Called by the view when the animation of the current Outcome has finished. */
   finishAnimation(): void;
-  /** Clears the Outcome and history (the dice set is kept); ignored while animating. */
+  /** Clears the Outcome and history (the dice set is kept); during a roll it also stops the roll. */
   reset(): void;
   /** With the animation skipped, a roll is finished at once (animating stays false). */
   setSkipAnimation(skip: boolean): void;
@@ -365,7 +365,7 @@ export function createDiceController(
       if (state.animating) update({ animating: false });
     },
     reset() {
-      if (!state.animating) update({ outcome: null, history: [] });
+      update({ outcome: null, history: [], animating: false });
     },
     setSkipAnimation: (skip) => setAnimation({ skip }),
     setAlwaysFullAnimation: (alwaysFull) => setAnimation({ alwaysFull }),

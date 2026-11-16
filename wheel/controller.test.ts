@@ -165,6 +165,23 @@ describe('wheel controller', () => {
     expect(wheel.getState().entries).toHaveLength(2);
   });
 
+  it('reset during a spin stops it, clears the Outcome and history, and draws nothing', () => {
+    const wheel = wheelWith(createTestEnv({ random: [at(0.25), 0, at(0.75), 0] }), [
+      { label: 'a', weight: 1 },
+      { label: 'b', weight: 1 },
+    ]);
+    wheel.setRemoveAfterDraw(true);
+    spinAndFinish(wheel);
+    wheel.spin();
+
+    wheel.reset();
+    expect(wheel.getState()).toMatchObject({ outcome: null, history: [], animating: false, drawnEntryIds: [] });
+    expect(wheel.getState().remainingEntries).toHaveLength(2);
+    // The interrupted animation reporting late draws nothing.
+    wheel.finishAnimation();
+    expect(wheel.getState()).toMatchObject({ outcome: null, animating: false, drawnEntryIds: [] });
+  });
+
   it('keeps the Outcome label as it was when spun after the entry is edited', () => {
     const wheel = wheelWith(createTestEnv({ random: [0, 0] }), [{ label: 'Old', weight: 1 }]);
     spinAndFinish(wheel);

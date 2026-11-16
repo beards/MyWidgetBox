@@ -216,13 +216,16 @@ describe('dice controller', () => {
     expect(dice.getState().diceSet).toEqual({ groups: [{ sides: 6, count: 1 }], modifier: 2 });
   });
 
-  it('ignores reset while animating', () => {
-    const dice = createDiceController(createTestEnv({ random: [2] }));
+  it('reset during a roll stops it and clears the Outcome and history', () => {
+    const dice = createDiceController(createTestEnv({ random: [2, 4] }));
+    rollAndFinish(dice);
     dice.roll();
 
     dice.reset();
-    expect(dice.getState().outcome!.total).toBe(3);
-    expect(dice.getState().animating).toBe(true);
+    expect(dice.getState()).toMatchObject({ outcome: null, history: [], animating: false });
+    // The interrupted animation reporting late changes nothing.
+    dice.finishAnimation();
+    expect(dice.getState()).toMatchObject({ outcome: null, history: [], animating: false });
   });
 
   it('plays the full animation by default', () => {

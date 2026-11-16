@@ -118,7 +118,7 @@ export interface WheelState {
   outcome: WheelOutcome | null;
   /** The most recent Outcomes, newest first, at most HISTORY_LIMIT; kept in memory only. */
   history: WheelOutcome[];
-  /** True from a spin until the view reports its animation finished; spins are ignored meanwhile. */
+  /** True from a spin until the view reports its animation finished or a reset stops it; spins are ignored meanwhile. */
   animating: boolean;
 }
 
@@ -138,7 +138,7 @@ export interface WheelController {
   spin(): void;
   /** Called by the view when the animation of the current Outcome has finished; records the draw. */
   finishAnimation(): void;
-  /** Clears the Outcome, history and drawn entries (entries are kept); ignored while animating. */
+  /** Clears the Outcome, history and drawn entries (entries are kept); during a spin it also stops the spin, which draws nothing. */
   reset(): void;
   /** Ignored while animating. */
   setRemoveAfterDraw(on: boolean): void;
@@ -446,9 +446,8 @@ export function createWheelController(
       update({ ...fromSettings(), animating: false });
     },
     reset() {
-      if (state.animating) return;
       setDrawn(() => []);
-      update({ ...fromSettings(), outcome: null, history: [] });
+      update({ ...fromSettings(), outcome: null, history: [], animating: false });
     },
     setRemoveAfterDraw(removeAfterDraw) {
       if (!state.animating) updateSettings({ removeAfterDraw });

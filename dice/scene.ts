@@ -32,6 +32,8 @@ import { type Arena, type ImpactSound, type StagedRoll, arenaFor, impactSounds, 
 export interface DiceScene {
   /** Shows these dice at rest on the table, without animating; a no-op if they are already shown. */
   show(rolls: DieRoll[]): void;
+  /** Stops a roll in progress where it is; its onDone is never called. */
+  stop(): void;
   /**
    * Drops these dice onto the table so they land on their values and calls onDone when they rest;
    * onImpact is called as they hit the table, the walls and each other (volume 0..1 from how hard).
@@ -379,6 +381,14 @@ export function createDiceScene(container: HTMLElement): DiceScene {
       place(rolls.flatMap(bodiesFor));
       setDown();
       render();
+    },
+
+    stop() {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      rolling = false;
+      // The dice may be mid-air, so the next show() redraws even the same values.
+      shownKey = '';
     },
 
     play(rolls, { animation, bounce }, onDone, onImpact) {

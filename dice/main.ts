@@ -83,6 +83,8 @@ const sound = createSoundPlayer();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each roll starts its animation exactly once. */
 let playing: DiceOutcome | null = null;
+/** True while the scene is still playing it (a reset stops it early). */
+let inFlight = false;
 const appearancePanel = mountAppearancePanel<DiceAppearance>(document.querySelector<HTMLElement>('#appearance')!, {
   i18n,
   // The dice offer their own background choice (mountBackdrop), which includes the felt.
@@ -174,13 +176,22 @@ function render(state: DiceState) {
 
   presetPanel.update(state);
 
+  // A reset during a roll ends it in the controller; stop the dice where they are.
+  if (inFlight && !animating) {
+    inFlight = false;
+    scene.stop();
+  }
   // Every new Outcome is played once; a skipped animation is already finished in the controller.
   if (outcome && outcome !== playing) {
     playing = outcome;
+    inFlight = true;
     scene.play(
       outcome.rolls,
       { animation: animationFor(state, reducedMotion.matches), bounce: appearance.tableBounce },
-      () => dice.finishAnimation(),
+      () => {
+        inFlight = false;
+        dice.finishAnimation();
+      },
       // Each impact is as loud as it was hard, relative to the volume setting.
       (volume) => {
         const settings = dice.getState().sound;

@@ -38,6 +38,8 @@ export interface WheelScene {
     options: { duration: number; reduced: boolean; onTick?: () => void },
     onDone: () => void,
   ): void;
+  /** Stops a spin in progress where it is; its onDone is never called. */
+  stop(): void;
 }
 
 const svg = <K extends keyof SVGElementTagNameMap>(name: K, attributes: Record<string, string | number> = {}) => {
@@ -172,6 +174,8 @@ export function createWheelScene(container: HTMLElement): WheelScene {
 
   let rotation = 0;
   let frame = 0;
+  /** The pending onDone of a reduced-motion landing. */
+  let landing = 0;
   let parts: ReturnType<typeof sectorsFor> = [];
   let layout: LabelLayout = { direction: 'across', sizeLimit: null };
 
@@ -240,14 +244,19 @@ export function createWheelScene(container: HTMLElement): WheelScene {
       labels.setAttribute('fill', label);
       pointer.body.setAttribute('fill', pointerColor);
     },
+    stop() {
+      cancelAnimationFrame(frame);
+      clearTimeout(landing);
+    },
     play(angle, { duration, reduced, onTick }, onDone) {
       cancelAnimationFrame(frame);
+      clearTimeout(landing);
       const from = rotation % 360;
       const to = landingRotation(from, angle, reduced ? 0 : Math.max(2, Math.round(duration / 700)));
       if (reduced) {
         rotation = to;
         applyRotation();
-        setTimeout(onDone, duration);
+        landing = window.setTimeout(onDone, duration);
         return;
       }
       const startTime = performance.now();

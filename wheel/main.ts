@@ -71,6 +71,8 @@ const sound = createSoundPlayer();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each spin starts its animation exactly once. */
 let playing: WheelOutcome | null = null;
+/** True while the scene is still playing it (a reset stops it early). */
+let inFlight = false;
 /** What the editor and the wheel were last rendered from, so they are rebuilt only when it changes. */
 let renderedEntries: WheelEntry[] | null = null;
 let renderedDrawn: string[] | null = null;
@@ -188,11 +190,18 @@ function render(state: WheelState) {
   allDrawnNotice.hidden = !allDrawn;
 
 
+  // A reset during a spin ends it in the controller; stop the wheel where it is.
+  if (inFlight && !animating) {
+    inFlight = false;
+    scene.stop();
+  }
   if (animating && outcome && outcome !== playing) {
     playing = outcome;
+    inFlight = true;
     hideResult();
     const onTick = () => sound.play('tick', wheel.getState().sound);
     scene.play(outcome.angle, { ...animationFor(state, reducedMotion.matches), onTick }, () => {
+      inFlight = false;
       wheel.finishAnimation();
       showResult(outcome);
     });
