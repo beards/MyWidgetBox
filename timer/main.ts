@@ -155,7 +155,11 @@ function createCard(id: string): TimerCard {
     return { key, input };
   });
   durationRow.append(durationLabel, ...parts.map(({ input }) => input));
-  settings.append(nameLabel.wrapper, modeLabel.wrapper, durationRow, targetLabel.wrapper, remove);
+  // First row: name, mode and remove; the mode's own control (duration or target time) goes below.
+  const basics = document.createElement('div');
+  basics.className = 'timer__settings-row';
+  basics.append(nameLabel.wrapper, modeLabel.wrapper, remove);
+  settings.append(basics, durationRow, targetLabel.wrapper);
 
   root.append(heading, value, status, actions, settings);
 

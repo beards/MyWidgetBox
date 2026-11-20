@@ -35,6 +35,14 @@ body {
   gap: 0.75rem;
 }
 
+/* Outside Display mode each timer is framed, so its controls read as belonging to its own digits.
+   The frame follows the display's text color, since themes never style the Widget's display. */
+html:not([data-display]) .timer__card {
+  padding: 1rem 1.5rem 1.25rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 0.75rem;
+}
+
 /* Time-up screen effect: the card flashes while the alert lasts. */
 .timer__card[data-alert] {
   animation: timer-flash 1s steps(1, end) infinite;
@@ -74,13 +82,18 @@ body {
 
 /* Per-timer controls keep a readable size whatever the display's text size. */
 .timer__actions,
-.timer__settings {
+.timer__settings,
+.timer__settings-row {
   font-size: 1rem;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
   gap: 0.75rem;
+}
+
+.timer__settings {
+  flex-direction: column;
 }
 
 .timer__actions button {
