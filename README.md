@@ -85,4 +85,4 @@ No other Widget needs to change.
 
 ## License
 
-[MIT](LICENSE)
+[MIT No Attribution (MIT-0)](LICENSE)
