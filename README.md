@@ -1,6 +1,6 @@
 # MyWidgetBox
 
-A growing collection of small, single-purpose browser Widgets for live streaming (OBS Browser Source) and everyday use. Static site, deployed to <https://beards.github.io/MyWidgetBox/>.
+A growing collection of small, single-purpose browser Widgets for live streaming (OBS Browser Source) and everyday use. Static site, deployed to <https://mywidgetbox.github.io/>.
 
 Vocabulary (Widget, Settings, State, Outcome, ...) is defined in [GLOSSARY.md](GLOSSARY.md); architecture decisions live in [docs/adr/](docs/adr/).
 
@@ -28,11 +28,11 @@ Requires Node 26 and npm.
 
 ```sh
 npm install
-npm run dev        # dev server at http://localhost:5173/MyWidgetBox/ (catalog), .../dice/, ...
+npm run dev        # dev server at http://localhost:5173/ (catalog), .../dice/, ...
 npm test           # run tests once (npm run test:watch to watch)
 npm run typecheck
 npm run lint
-npm run build      # production build into dist/ (base path /MyWidgetBox/)
+npm run build      # production build into dist/ (base path /)
 npm run preview    # serve the production build
 ```
 
