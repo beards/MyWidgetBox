@@ -1,6 +1,6 @@
 # Stored formats stay readable
 
-Starting with the release that publishes the reworked sound settings (a custom sound switch choosing a picked file or a URL; late November 2026), everything the site writes outside the running page must stay readable by every later version, so a user never loses Presets, State or a Share link to an update. Until that release, formats may still change without migrations. That covers:
+Since the release of 2026-11-22 (the one that published the reworked sound settings), everything the site writes outside the running page must stay readable by every later version, so a user never loses Presets, State or a Share link to an update. That covers:
 
 - each Widget's Presets in `localStorage` (`mywidgetbox:<widget>:settings`) and its export file;
 - Share links (`?s=` with the versioned Settings, plus `display`, `transparent`, `lang` and the timer's `timer`);
