@@ -50,8 +50,13 @@
       }
 
       .catalog__tagline {
-        margin: 0.5rem 0 0;
+        margin: 0.75rem 0 0;
         color: var(--theme-muted);
+      }
+
+      /* Consecutive taglines read as one block: closer to each other than to the title. */
+      .catalog__tagline + .catalog__tagline {
+        margin-top: 0.25rem;
       }
 
       .catalog__switchers {
@@ -143,6 +148,7 @@
         <div>
           <h1 class="catalog__title" data-i18n="title"></h1>
           <p class="catalog__tagline" data-i18n="tagline"></p>
+          <p class="catalog__tagline" data-i18n="freeUse"></p>
         </div>
         <div class="catalog__switchers" id="language"></div>
       </header>
