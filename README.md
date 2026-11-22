@@ -1,6 +1,8 @@
 # MyWidgetBox
 
-A growing collection of small, single-purpose browser Widgets for live streaming (OBS Browser Source) and everyday use. Static site, deployed to <https://mywidgetbox.github.io/>.
+English | [正體中文](README.zh-TW.md)
+
+A growing collection of small, single-purpose browser Widgets for live streaming (OBS Browser Source) and everyday use.
 
 Vocabulary (Widget, Settings, State, Outcome, ...) is defined in [GLOSSARY.md](GLOSSARY.md); architecture decisions live in [docs/adr/](docs/adr/).
 
