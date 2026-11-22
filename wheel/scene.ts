@@ -86,8 +86,8 @@ function textMeasurer(group: SVGGElement): (text: string, size: number) => numbe
 
 const POINTER_SHADOW = 'wheel-pointer-shadow';
 const POINTER_SHADE = 'wheel-pointer-shade';
-/** A pin at the top: a round head (center y -105, radius 8) tapering to a tip into the wheel. */
-const POINTER_PATH = 'M 0 -90 L -6.77 -100.73 A 8 8 0 1 1 6.77 -100.73 Z';
+/** At the top: a downward triangle with rounded corners (14 wide at y -111.5), its tip reaching into the wheel. */
+const POINTER_PATH = 'M -7 -109.5 Q -7 -111.5 -5 -111.5 L 5 -111.5 Q 7 -111.5 7 -109.5 L 1.1 -92.6 Q 0 -90.4 -1.1 -92.6 Z';
 
 const WHEEL_SHADOW = 'wheel-shadow';
 const WHEEL_LIGHT = 'wheel-light';
@@ -133,13 +133,12 @@ function sceneDefs(): SVGDefsElement {
   return defs;
 }
 
-/** The pointer: `body` takes the pointer color; the shading and the rivet on top work over any color. */
+/** The pointer: `body` takes the pointer color; the shading on top works over any color. */
 function createPointer() {
   const group = svg('g', { filter: `url(#${POINTER_SHADOW})` });
   const body = svg('path', { d: POINTER_PATH });
   const shading = svg('path', { d: POINTER_PATH, fill: `url(#${POINTER_SHADE})` });
-  const rivet = svg('circle', { cx: 0, cy: -105, r: 2.5, fill: '#ffffff', 'fill-opacity': 0.85 });
-  group.append(body, shading, rivet);
+  group.append(body, shading);
   return { group, body };
 }
 

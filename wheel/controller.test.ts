@@ -670,7 +670,7 @@ describe('wheel defaults follow the site theme', () => {
     const env = createTestEnv();
     writeTheme(env.storage, 'dark');
     const wheel = createWheelController(env);
-    expect(look(wheel.getState())).toEqual(['#121417', '#e8e9eb']);
+    expect(look(wheel.getState())).toEqual(['#121417', '#a6abb2']);
 
     writeTheme(env.storage, 'paper');
     wheel.followTheme();

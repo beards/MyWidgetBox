@@ -204,16 +204,26 @@ const defaultEntries: WheelEntry[] = ['A', 'B', 'C', 'D', 'E', 'F'].map((label, 
   color: PALETTE[index % PALETTE.length]!,
 }));
 
-/** The default Settings, in the colors of a site theme: its page background, and its text color for the pointer. */
+/**
+ * The default pointer color in each site theme: the theme's text color, except a grayer silver in the
+ * dark theme, where a near-white pointer would hide its side-lit shading.
+ */
+const POINTER_COLORS: Record<Theme, string> = {
+  soft: THEME_COLORS.soft.text,
+  dark: '#a6abb2',
+  paper: THEME_COLORS.paper.text,
+};
+
+/** The default Settings, in the colors of a site theme: its page background, and a pointer to match (POINTER_COLORS). */
 export function wheelDefaults(theme: Theme): WheelSettings {
-  const { background, text } = THEME_COLORS[theme];
+  const { background } = THEME_COLORS[theme];
   return {
     entries: defaultEntries,
     appearance: {
       ...appearanceDefaults,
       background: { ...appearanceDefaults.background, color: background },
       labelColor: '#ffffff',
-      pointerColor: text,
+      pointerColor: POINTER_COLORS[theme],
       labelDirection: 'across',
       limitLabelSize: true,
       maxLabelSize: 20,
