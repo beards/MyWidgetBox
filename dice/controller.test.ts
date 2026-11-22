@@ -228,6 +228,67 @@ describe('dice controller', () => {
     expect(dice.getState()).toMatchObject({ outcome: null, history: [], animating: false });
   });
 
+  it('changing the dice clears the Outcome on the table but keeps it in the history', () => {
+    const dice = createDiceController(createTestEnv({ random: [2, 4, 1, 3, 5, 0] }));
+    rollAndFinish(dice);
+
+    dice.setCount(6, 2);
+    expect(dice.getState()).toMatchObject({ outcome: null, animating: false });
+    expect(dice.getState().history).toHaveLength(1);
+
+    rollAndFinish(dice);
+    dice.addDie(20);
+    expect(dice.getState().outcome).toBeNull();
+    rollAndFinish(dice);
+    dice.removeDie(20);
+    expect(dice.getState().outcome).toBeNull();
+  });
+
+  it('ignores changes to the dice, the Presets and the Settings file while rolling', () => {
+    const dice = createDiceController(createTestEnv({ random: [2] }));
+    const first = dice.getState().selectedPresetId!;
+    const exported = dice.exportSettings();
+    dice.createPreset('Other');
+    dice.roll();
+    const rolling = dice.getState();
+
+    dice.setCount(6, 3);
+    dice.addDie(20);
+    dice.removeDie(6);
+    dice.setModifier(5);
+    dice.restoreDefaults();
+    dice.createPreset('During the roll');
+    dice.selectPreset(first);
+    dice.deletePreset(first);
+    expect(dice.importSettings(exported)).toBe(false);
+    expect(dice.getState()).toEqual(rolling);
+
+    dice.finishAnimation();
+    dice.setCount(6, 3);
+    expect(dice.getState().diceSet.groups).toEqual([{ sides: 6, count: 3 }]);
+  });
+
+  it('keeps the Outcome when only the modifier or a same count is set', () => {
+    const dice = createDiceController(createTestEnv({ random: [2] }));
+    rollAndFinish(dice);
+    const { outcome } = dice.getState();
+
+    dice.setModifier(3);
+    dice.setCount(6, 1);
+    expect(dice.getState().outcome).toBe(outcome);
+  });
+
+  it('switching to a Preset with other dice clears the Outcome', () => {
+    const dice = createDiceController(createTestEnv({ random: [2, 4] }));
+    const first = dice.getState().selectedPresetId!;
+    dice.createPreset('Two dice');
+    dice.setCount(6, 2);
+    rollAndFinish(dice);
+
+    dice.selectPreset(first);
+    expect(dice.getState().outcome).toBeNull();
+  });
+
   it('plays the full animation by default', () => {
     const dice = createDiceController(createTestEnv());
     expect(dice.getState()).toMatchObject({ skipAnimation: false, alwaysFullAnimation: false });

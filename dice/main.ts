@@ -69,6 +69,8 @@ const historyList = $<HTMLOListElement>('#history');
  */
 let shownBackground = '';
 let shownGroups: DiceSet['groups'] | null = null;
+/** Whether the shown dice set list is locked (while rolling). */
+let shownGroupsLocked = false;
 let shownHistory: { history: DiceOutcome[]; animating: boolean } | null = null;
 /** applyAppearance's page target while the background is unchanged, so it does not repaint the page. */
 const unchangedPage = document.createElement('div');
@@ -125,7 +127,7 @@ orderAppearanceRows(document.querySelector<HTMLElement>('#appearance')!, [
 ]);
 const presetPanel = mountPresetPanel(dice, i18n);
 const sharePanel = mountSharePanel(i18n, (options) => dice.shareLink(options));
-mountSettingsFilePanel(i18n, {
+const settingsFilePanel = mountSettingsFilePanel(i18n, {
   fileName: 'mywidgetbox-dice-settings.json',
   exportSettings: () => dice.exportSettings(),
   importSettings: (text) => dice.importSettings(text),
@@ -174,7 +176,10 @@ function render(state: DiceState) {
   if (document.activeElement !== diceSize.input) diceSize.input.value = String(appearance.diceSize);
   diceSize.value.textContent = formatDiceSize(appearance.diceSize);
 
-  presetPanel.update(state);
+  // While rolling, nothing that changes the dice can be used (the controller ignores it too).
+  presetPanel.update(state, { locked: animating });
+  settingsFilePanel.update({ locked: animating });
+  addSides.disabled = addButton.disabled = modifierInput.disabled = animating;
 
   // A reset during a roll ends it in the controller; stop the dice where they are.
   if (inFlight && !animating) {
@@ -211,15 +216,16 @@ function render(state: DiceState) {
   // Follows the Settings in effect, so a Preset switch or an import turns listening on or off.
   syncShakes(state.shakeToRoll);
 
-  if (diceSet.groups !== shownGroups) renderGroups(diceSet.groups);
+  if (diceSet.groups !== shownGroups || animating !== shownGroupsLocked) renderGroups(diceSet.groups, animating);
 
   sharePanel.refresh();
 
   if (history !== shownHistory?.history || animating !== shownHistory.animating) renderHistory(history, animating);
 }
 
-function renderGroups(groups: DiceSet['groups']) {
+function renderGroups(groups: DiceSet['groups'], locked: boolean) {
   shownGroups = groups;
+  shownGroupsLocked = locked;
   groupList.replaceChildren(
     ...groups.map(({ sides, count }) => {
       const label = dieLabel(sides);
@@ -229,6 +235,7 @@ function renderGroups(groups: DiceSet['groups']) {
       countInput.min = '1';
       countInput.max = String(MAX_DICE_PER_KIND);
       countInput.value = String(count);
+      countInput.disabled = locked;
       countInput.setAttribute('aria-label', t('count', { label }));
       countInput.addEventListener('change', () => edit(() => dice.setCount(sides, Number(countInput.value))));
       const name = document.createElement('span');
@@ -237,7 +244,7 @@ function renderGroups(groups: DiceSet['groups']) {
       remove.type = 'button';
       remove.textContent = '×';
       remove.setAttribute('aria-label', t('removeDie', { label }));
-      remove.disabled = groups.length === 1;
+      remove.disabled = groups.length === 1 || locked;
       remove.addEventListener('click', () => dice.removeDie(sides));
       item.append(countInput, name, remove);
       return item;

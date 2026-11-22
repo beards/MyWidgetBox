@@ -126,6 +126,7 @@ export interface DiceState {
   presets: PresetSummary[];
   /** null while Settings opened from a Share link are in effect and not saved. */
   selectedPresetId: string | null;
+  /** The latest roll; cleared when the dice to roll change (the history keeps it). */
   outcome: DiceOutcome | null;
   /** The most recent Outcomes, newest first, at most HISTORY_LIMIT; kept in memory only. */
   history: DiceOutcome[];
@@ -143,13 +144,13 @@ export interface DiceController {
   getState(): DiceState;
   /** Calls listener after every state change; returns an unsubscribe function. */
   subscribe(listener: (state: DiceState) => void): () => void;
-  /** Adds one die of this kind (a new group, or one more in the existing group). */
+  /** Adds one die of this kind (a new group, or one more in the existing group). Changes to the dice clear the Outcome; all are ignored while rolling. */
   addDie(sides: DieSides): void;
   /** Removes the whole group of this kind; the last remaining group cannot be removed. */
   removeDie(sides: DieSides): void;
   /** Sets how many dice of this kind are rolled (0 removes the group); invalid counts are ignored. */
   setCount(sides: DieSides, count: number): void;
-  /** Sets the fixed integer added to every total; non-integers are ignored. */
+  /** Sets the fixed integer added to every total (the Outcome stays); non-integers are ignored, and so is any change while rolling. */
   setModifier(modifier: number): void;
   /** Replaces the appearance (applied live); invalid appearances are ignored. */
   setAppearance(appearance: DiceAppearance): void;
@@ -165,19 +166,20 @@ export interface DiceController {
   /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
   setSound(next: Partial<SoundSettings>): void;
   setShakeToRoll(enabled: boolean): void;
-  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. */
+  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. Ignored while rolling. */
   restoreDefaults(): void;
-  /** Saves the current Settings as a new Preset and switches to it. */
+  /** Saves the current Settings as a new Preset and switches to it. Ignored while rolling. */
   createPreset(name: string): void;
+  /** Ignored while rolling. */
   selectPreset(id: string): void;
   renamePreset(id: string, name: string): void;
-  /** The last remaining Preset cannot be deleted. */
+  /** The last remaining Preset cannot be deleted; ignored while rolling. */
   deletePreset(id: string): void;
   /** A Share link to this page carrying the Settings in effect. */
   shareLink(options?: ShareLinkOptions): string;
   /** JSON backup of every Preset. */
   exportSettings(): string;
-  /** Replaces all Presets from an export file; returns false and changes nothing if it is invalid. */
+  /** Replaces all Presets from an export file; returns false and changes nothing if it is invalid or while rolling. */
   importSettings(text: string): boolean;
 }
 
@@ -243,6 +245,10 @@ function isSpecialPips(value: unknown): value is SpecialPips {
   );
 }
 
+function sameGroups(a: DiceGroup[], b: DiceGroup[]): boolean {
+  return a.length === b.length && a.every((group, index) => group.sides === b[index]!.sides && group.count === b[index]!.count);
+}
+
 function isDiceSet(value: unknown): value is DiceSet {
   const { groups, modifier } = (value ?? {}) as Partial<DiceSet>;
   return (
@@ -296,11 +302,24 @@ export function createDiceController(
     listeners.forEach((listener) => listener(state));
   }
 
-  /** Runs a Settings action, then publishes the resulting Settings and Presets. */
+  /**
+   * Publishes the Settings and Presets now in the store. When they change which dice are rolled,
+   * the Outcome leaves the table (the history keeps it); a new modifier alone keeps it. Actions
+   * that can change the dice are ignored while rolling (see `locked`).
+   */
+  function publishSettings() {
+    const next = fromSettings();
+    update(sameGroups(state.diceSet.groups, next.diceSet.groups) ? next : { ...next, outcome: null });
+  }
+
+  /** Runs a Settings action, then publishes the result. */
   function changeSettings(action: () => void) {
     action();
-    update(fromSettings());
+    publishSettings();
   }
+
+  /** While rolling, the dice set, the Presets and the Settings file cannot change. */
+  const locked = () => state.animating;
 
   function updateSettings(next: Partial<DiceSettings>) {
     changeSettings(() => settings.update({ ...settings.getSnapshot().settings, ...next }));
@@ -320,7 +339,7 @@ export function createDiceController(
   }
 
   function setCount(sides: DieSides, count: number) {
-    if (!Number.isInteger(count) || count < 0 || count > MAX_DICE_PER_KIND) return;
+    if (locked() || !Number.isInteger(count) || count < 0 || count > MAX_DICE_PER_KIND) return;
     const { groups } = state.diceSet;
     if (count === 0) {
       setGroups(groups.filter((group) => group.sides !== sides));
@@ -344,7 +363,7 @@ export function createDiceController(
     removeDie: (sides) => setCount(sides, 0),
     setCount,
     setModifier(modifier) {
-      if (!Number.isSafeInteger(modifier)) return;
+      if (locked() || !Number.isSafeInteger(modifier)) return;
       setDiceSet({ ...state.diceSet, modifier });
     },
     setAppearance(appearance) {
@@ -374,17 +393,25 @@ export function createDiceController(
       if (isSoundSettings(sound)) updateSettings({ sound });
     },
     setShakeToRoll: (shakeToRoll) => updateSettings({ shakeToRoll }),
-    restoreDefaults: () => changeSettings(() => settings.update(diceSettingsSchema.defaults)),
-    createPreset: (name) => changeSettings(() => settings.createPreset(name)),
-    selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
+    restoreDefaults() {
+      if (!locked()) changeSettings(() => settings.update(diceSettingsSchema.defaults));
+    },
+    createPreset(name) {
+      if (!locked()) changeSettings(() => settings.createPreset(name));
+    },
+    selectPreset(id) {
+      if (!locked()) changeSettings(() => settings.selectPreset(id));
+    },
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
-    deletePreset: (id) => changeSettings(() => settings.deletePreset(id)),
+    deletePreset(id) {
+      if (!locked()) changeSettings(() => settings.deletePreset(id));
+    },
     shareLink: (options) =>
       createShareLink(env.url, serializeSettings(diceSettingsSchema, settings.getSnapshot().settings), options),
     exportSettings: () => settings.exportFile(),
     importSettings(text) {
-      if (!settings.importFile(text)) return false;
-      update(fromSettings());
+      if (locked() || !settings.importFile(text)) return false;
+      publishSettings();
       return true;
     },
   };
