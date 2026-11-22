@@ -1,4 +1,5 @@
 import { type AppearanceMessageKey, appearanceMessages } from '../shared/appearance-messages';
+import { type SoundMessageKey, soundMessages } from '../shared/sound-messages';
 import type { MessageTables } from '../shared/i18n';
 
 export type DiceMessageKey =
@@ -10,7 +11,6 @@ export type DiceMessageKey =
   | 'sound'
   | 'soundEnabled'
   | 'soundVolume'
-  | 'soundUrl'
   | 'shakeToRoll'
   | 'shakeUnsupported'
   | 'shakeDenied'
@@ -54,9 +54,10 @@ export type DiceMessageKey =
   | 'specialPipsColor'
   | 'finishFelt';
 
-export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
+export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey | SoundMessageKey> = {
   en: {
     ...appearanceMessages.en,
+    ...soundMessages.en,
     // The shared text items style the result text only.
     fontFamily: 'Result text font',
     fontSize: 'Result text size',
@@ -70,7 +71,6 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     sound: 'Sound',
     soundEnabled: 'Play a sound when the dice hit the table and each other',
     soundVolume: 'Volume',
-    soundUrl: 'Custom sound URL (empty = built-in)',
     shakeToRoll: 'Shake the phone to roll',
     shakeUnsupported: 'This device cannot detect shaking.',
     shakeDenied: 'Motion access was denied, so shaking cannot roll. Allow it in the browser settings and try again.',
@@ -115,6 +115,7 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
   },
   'zh-Hant': {
     ...appearanceMessages['zh-Hant'],
+    ...soundMessages['zh-Hant'],
     // The shared text items style the result text only.
     fontFamily: '結果文字字型',
     fontSize: '結果文字大小',
@@ -128,7 +129,6 @@ export const messages: MessageTables<DiceMessageKey | AppearanceMessageKey> = {
     sound: '音效',
     soundEnabled: '骰子撞到桌面和彼此時播放音效',
     soundVolume: '音量',
-    soundUrl: '自訂音效網址（留空＝內建音效）',
     shakeToRoll: '搖手機擲骰',
     shakeUnsupported: '此裝置無法偵測搖動。',
     shakeDenied: '動作感應存取被拒，無法搖動擲骰。請在瀏覽器設定中允許後再試一次。',

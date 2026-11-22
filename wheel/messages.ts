@@ -1,4 +1,5 @@
 import { type AppearanceMessageKey, appearanceMessages } from '../shared/appearance-messages';
+import { type SoundMessageKey, soundMessages } from '../shared/sound-messages';
 import type { MessageTables } from '../shared/i18n';
 
 export type WheelMessageKey =
@@ -59,11 +60,14 @@ export type WheelMessageKey =
   | 'sound'
   | 'soundEnabled'
   | 'soundVolume'
-  | 'soundUrl';
+  | 'soundPlayback'
+  | 'soundPlaybackLoop'
+  | 'soundPlaybackPerSector';
 
-export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
+export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey | SoundMessageKey> = {
   en: {
     ...appearanceMessages.en,
+    ...soundMessages.en,
     fontFamily: 'Entry text font',
     title: 'Wheel · MyWidgetBox',
     spin: 'Spin',
@@ -122,10 +126,13 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     sound: 'Sound',
     soundEnabled: 'Sound while the wheel spins',
     soundVolume: 'Volume',
-    soundUrl: 'Custom sound URL, looped while spinning (empty = built-in tick)',
+    soundPlayback: 'Custom sound playback',
+    soundPlaybackLoop: 'Loop',
+    soundPlaybackPerSector: 'Restart at each sector',
   },
   'zh-Hant': {
     ...appearanceMessages['zh-Hant'],
+    ...soundMessages['zh-Hant'],
     fontFamily: '選項文字字型',
     title: '轉盤 · MyWidgetBox',
     spin: '轉動',
@@ -184,6 +191,8 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     sound: '音效',
     soundEnabled: '轉動時播放音效',
     soundVolume: '音量',
-    soundUrl: '自訂音效網址，轉動時循環播放（留空＝內建喀喀聲）',
+    soundPlayback: '自訂音效播放方式',
+    soundPlaybackLoop: '循環播放',
+    soundPlaybackPerSector: '每格重新播放',
   },
 };

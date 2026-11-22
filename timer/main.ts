@@ -9,6 +9,7 @@ import { mountPanelToggle } from '../shared/panel-toggle';
 import { mountThemeSwitcher } from '../shared/theme-dom';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
+import { createStoredSoundFiles } from '../shared/sound-files';
 import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
 import { createWakeLock } from '../shared/wake-lock';
 import {
@@ -47,7 +48,9 @@ const showFraction = $<HTMLInputElement>('#show-fraction');
 const alertSoundSeconds = $<HTMLInputElement>('#alert-sound-seconds');
 const alertEffectSeconds = $<HTMLInputElement>('#alert-effect-seconds');
 
-const sound = createSoundPlayer();
+/** Sound files picked from this device; the player and the sound inputs share them. */
+const soundFiles = createStoredSoundFiles();
+const sound = createSoundPlayer({ files: soundFiles });
 const wakeLock = createWakeLock();
 /** Stop functions of the alert sounds playing now, by timer id. */
 const alertSounds = new Map<string, () => void>();
@@ -73,7 +76,7 @@ mountSettingsFilePanel(i18n, {
   importSettings: (text) => timer.importSettings(text),
   restoreDefaults: () => timer.restoreDefaults(),
 });
-const soundInputs = mountSoundInputs(timer, sound, 'alert');
+const soundInputs = mountSoundInputs(timer, sound, 'alert', { i18n, files: soundFiles });
 
 const MODE_LABELS = { countdown: 'modeCountdown', targetTime: 'modeTargetTime', stopwatch: 'modeStopwatch' } as const;
 

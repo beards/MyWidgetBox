@@ -8,6 +8,7 @@ import { mountThemeSwitcher } from '../shared/theme-dom';
 import { applyDisplayMode } from '../shared/display-mode';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
+import { createStoredSoundFiles } from '../shared/sound-files';
 import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
 import {
   DIE_SIDES,
@@ -81,7 +82,9 @@ const shakeInput = $<HTMLInputElement>('#shake-to-roll');
 const shakeStatus = $('#shake-status');
 
 const scene = createSceneOrFallback(die);
-const sound = createSoundPlayer();
+/** Sound files picked from this device; the player and the sound inputs share them. */
+const soundFiles = createStoredSoundFiles();
+const sound = createSoundPlayer({ files: soundFiles });
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each roll starts its animation exactly once. */
 let playing: DiceOutcome | null = null;
@@ -133,7 +136,7 @@ const settingsFilePanel = mountSettingsFilePanel(i18n, {
   importSettings: (text) => dice.importSettings(text),
   restoreDefaults: () => dice.restoreDefaults(),
 });
-const soundInputs = mountSoundInputs(dice, sound, 'diceHit');
+const soundInputs = mountSoundInputs(dice, sound, 'diceHit', { i18n, files: soundFiles });
 
 function renderAddSides() {
   const selected = addSides.value || '20';

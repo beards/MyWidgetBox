@@ -17,7 +17,7 @@ Blocked by: None (can start immediately)
 
 ## Answer
 
-2026-11-22 使用者宣布：這次設定存檔整理完之後就開始守相容。
+2026-11-22 使用者宣布要開始守相容；同日改為：等音效設定改版（自訂音效開關、選擇檔案或外部網址）發佈到正式站之後才開始，在那之前格式仍可直接改。
 
 - **從哪個版本開始承諾相容：** 三個 Widget 的 Settings、兩份 State、Share link、匯出檔，以及 `lang`／`theme` 都從現在的 version 1 開始。規則寫在 [ADR-0004](../../../docs/adr/0004-stored-formats-stay-readable.md)：加欄位只要給預設值；其他改動都要升版號並附 Migration。
 - **Migration 機制：** 刻意先不加回去。現在沒有任何 Migration，加回來只會是沒人用的程式碼。第一個需要升版號的改動再加，ADR-0004 已經要求那時一定要附。

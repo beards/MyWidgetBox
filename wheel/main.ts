@@ -8,6 +8,7 @@ import { mountPanelToggle } from '../shared/panel-toggle';
 import { mountThemeSwitcher } from '../shared/theme-dom';
 import { readDisplayOptions } from '../shared/share-link';
 import { createSoundPlayer } from '../shared/sound';
+import { createStoredSoundFiles } from '../shared/sound-files';
 import { mountPresetPanel, mountSettingsFilePanel, mountSharePanel, mountSoundInputs } from '../shared/widget-dom';
 import {
   LABEL_DIRECTIONS,
@@ -19,6 +20,7 @@ import {
   RESULT_TEXT_SIZE_MAX,
   RESULT_TEXT_SIZE_MIN,
   type LabelDirection,
+  type SoundPlayback,
   type WheelAppearance,
   type WheelEntry,
   type WheelOutcome,
@@ -67,7 +69,9 @@ const resultSecondsValue = $<HTMLOutputElement>('#result-seconds-value');
 const allDrawnNotice = $('#all-drawn');
 
 const scene = createWheelScene(stage);
-const sound = createSoundPlayer();
+/** Sound files picked from this device; the player and the sound inputs share them. */
+const soundFiles = createStoredSoundFiles();
+const sound = createSoundPlayer({ files: soundFiles });
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** The Outcome currently being animated, so each spin starts its animation exactly once. */
 let playing: WheelOutcome | null = null;
@@ -121,7 +125,11 @@ const settingsFilePanel = mountSettingsFilePanel(i18n, {
   importSettings: (text) => wheel.importSettings(text),
   restoreDefaults: () => wheel.restoreDefaults(),
 });
-const soundInputs = mountSoundInputs(wheel, sound, 'tick');
+const soundInputs = mountSoundInputs(wheel, sound, 'tick', { i18n, files: soundFiles });
+const soundPlaybackInputs = document.querySelectorAll<HTMLInputElement>('input[name="sound-playback"]');
+for (const input of soundPlaybackInputs) {
+  input.addEventListener('change', () => wheel.setSoundPlayback(input.value as SoundPlayback));
+}
 
 function showResult(outcome: WheelOutcome) {
   result.textContent = outcome.label;
@@ -204,12 +212,16 @@ function render(state: WheelState) {
     playing = outcome;
     inFlight = true;
     hideResult();
-    // A custom sound file loops while the wheel turns, whatever the sectors; the built-in tick
-    // (also when the file cannot be played) sounds at each sector boundary.
-    let ticks = state.sound.url === '';
-    stopSpinSound = sound.loop(state.sound, () => (ticks = true));
+    // A custom sound file either loops while the wheel turns or restarts at each sector boundary
+    // (soundPlayback); without one, or when it cannot be played, the built-in tick sounds at each boundary.
+    const spinSound = state.sound;
+    const perSector = state.soundPlayback === 'perSector';
+    let ticks = !sound.hasFile(spinSound);
+    stopSpinSound = perSector ? () => sound.stop(spinSound) : sound.loop(spinSound, () => (ticks = true));
     const onTick = () => {
-      if (ticks) sound.play('tick', { ...wheel.getState().sound, url: '' });
+      if (ticks) sound.play('tick', { ...wheel.getState().sound, custom: false });
+      // play() restarts the file, and falls back to the built-in tick by itself if it cannot be played.
+      else if (perSector) sound.play('tick', spinSound);
     };
     scene.play(outcome.angle, { ...animationFor(state, reducedMotion.matches), onTick }, () => {
       inFlight = false;
@@ -235,6 +247,11 @@ function render(state: WheelState) {
   resultSecondsInput.value = String(state.result.seconds);
   resultSecondsValue.textContent = t('seconds', { seconds: state.result.seconds });
   soundInputs.update(state.sound);
+  for (const input of soundPlaybackInputs) {
+    input.checked = input.value === state.soundPlayback;
+    // Only a custom sound has a playback choice.
+    input.disabled = !state.sound.enabled || !state.sound.custom;
+  }
   sharePanel.refresh();
 
   // While spinning, the newest entry would give the Outcome away before the wheel stops.

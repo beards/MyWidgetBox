@@ -1,4 +1,5 @@
 import { type AppearanceMessageKey, appearanceMessages } from '../shared/appearance-messages';
+import { type SoundMessageKey, soundMessages } from '../shared/sound-messages';
 import type { MessageTables } from '../shared/i18n';
 
 export type TimerMessageKey =
@@ -15,7 +16,6 @@ export type TimerMessageKey =
   | 'alertEffectSeconds'
   | 'soundEnabled'
   | 'soundVolume'
-  | 'soundUrl'
   | 'mode'
   | 'modeCountdown'
   | 'modeStopwatch'
@@ -57,9 +57,10 @@ export type TimerMessageKey =
   | 'panelToggle'
   | 'home';
 
-export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
+export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey | SoundMessageKey> = {
   en: {
     ...appearanceMessages.en,
+    ...soundMessages.en,
     title: 'Timer · MyWidgetBox',
     unnamedTimer: 'Timer',
     start: 'Start',
@@ -73,7 +74,6 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
     alertEffectSeconds: 'Flash length (seconds, 0 = until stopped)',
     soundEnabled: "Play a sound when time's up",
     soundVolume: 'Volume',
-    soundUrl: 'Custom sound URL (empty = built-in)',
     mode: 'Mode',
     modeCountdown: 'Countdown',
     modeStopwatch: 'Stopwatch',
@@ -117,6 +117,7 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
   },
   'zh-Hant': {
     ...appearanceMessages['zh-Hant'],
+    ...soundMessages['zh-Hant'],
     title: '計時器 · MyWidgetBox',
     unnamedTimer: '計時器',
     start: '開始',
@@ -130,7 +131,6 @@ export const messages: MessageTables<TimerMessageKey | AppearanceMessageKey> = {
     alertEffectSeconds: '閃爍長度（秒，0＝直到停止）',
     soundEnabled: '時間到時播放提示音',
     soundVolume: '音量',
-    soundUrl: '自訂音效網址（留空＝內建音效）',
     mode: '模式',
     modeCountdown: '倒數',
     modeStopwatch: '碼表',

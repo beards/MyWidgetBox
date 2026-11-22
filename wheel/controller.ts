@@ -77,10 +77,16 @@ export interface WheelSettings {
   animation: AnimationSettings;
   /** Take each drawn entry off the wheel until reset (the drawn entries are State, not Settings). */
   removeAfterDraw: boolean;
-  /** Tick played each time a sector boundary passes the pointer. */
+  /** Tick played each time a sector boundary passes the pointer, unless a custom sound file plays (see soundPlayback). */
   sound: SoundSettings;
+  /** How a custom sound file plays while the wheel turns. */
+  soundPlayback: SoundPlayback;
   result: WheelResultSettings;
 }
+
+/** `loop`: over and over while the wheel turns; `perSector`: from the start each time a sector boundary passes the pointer. */
+export const SOUND_PLAYBACKS = ['loop', 'perSector'] as const;
+export type SoundPlayback = (typeof SOUND_PLAYBACKS)[number];
 
 /** The pop-up showing the Outcome: it can always be clicked away. */
 export interface WheelResultSettings {
@@ -99,6 +105,7 @@ export interface WheelState {
   removeAfterDraw: boolean;
   /** The sound Settings in effect; the view plays the tick with them. */
   sound: SoundSettings;
+  soundPlayback: SoundPlayback;
   result: WheelResultSettings;
   /**
    * Ids of entries drawn since the last reset (State: kept across reloads, never in Share links),
@@ -144,6 +151,8 @@ export interface WheelController {
   setRemoveAfterDraw(on: boolean): void;
   /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
   setSound(next: Partial<SoundSettings>): void;
+  /** Invalid values are ignored. */
+  setSoundPlayback(playback: SoundPlayback): void;
   /** Sets the full animation length in ms; values outside 1–10 seconds are ignored. */
   setAnimationDuration(ms: number): void;
   setAlwaysFullAnimation(always: boolean): void;
@@ -202,6 +211,7 @@ export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
     animation: { duration: 5000, alwaysFull: false },
     removeAfterDraw: false,
     sound: soundDefaults,
+    soundPlayback: 'loop',
     result: { autoHide: false, seconds: 4 },
   },
   isValid: (settings): settings is WheelSettings =>
@@ -210,6 +220,7 @@ export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
     isAnimationSettings((settings as WheelSettings).animation) &&
     typeof (settings as WheelSettings).removeAfterDraw === 'boolean' &&
     isSoundSettings((settings as WheelSettings).sound) &&
+    SOUND_PLAYBACKS.includes((settings as WheelSettings).soundPlayback) &&
     isResultSettings((settings as WheelSettings).result),
 };
 
@@ -347,6 +358,7 @@ export function createWheelController(
       alwaysFullAnimation: current.animation.alwaysFull,
       removeAfterDraw,
       sound: current.sound,
+      soundPlayback: current.soundPlayback,
       result: current.result,
       drawnEntryIds: drawn,
       remainingEntries,
@@ -427,6 +439,9 @@ export function createWheelController(
     setSound(next) {
       const sound = { ...settings.getSnapshot().settings.sound, ...next };
       if (isSoundSettings(sound)) updateSettings({ sound });
+    },
+    setSoundPlayback(soundPlayback) {
+      if (SOUND_PLAYBACKS.includes(soundPlayback)) updateSettings({ soundPlayback });
     },
     setAnimationDuration(ms) {
       if (isAnimationDuration(ms)) setAnimation({ duration: ms });

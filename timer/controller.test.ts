@@ -785,7 +785,7 @@ describe('alert and sound Settings', () => {
   it('defaults to 5 s of sound and 10 s of effect', () => {
     const { timer } = setup();
     expect(timer.getState().alert).toEqual({ soundSeconds: 5, effectSeconds: 10 });
-    expect(timer.getState().sound).toEqual({ enabled: true, volume: 0.7, url: '' });
+    expect(timer.getState().sound).toEqual({ enabled: true, volume: 0.7, custom: false, source: 'file', url: '', file: '' });
   });
 
   it('applies valid values, ignores invalid ones, and remembers them', () => {
@@ -794,12 +794,12 @@ describe('alert and sound Settings', () => {
     timer.setAlert({ soundSeconds: 0 });
     timer.setAlert({ effectSeconds: 1.5 });
     timer.setAlert({ effectSeconds: -1 });
-    timer.setSound({ url: 'https://example.test/ding.mp3' });
+    timer.setSound({ custom: true, source: 'url', url: 'https://example.test/ding.mp3' });
     timer.setSound({ url: 'javascript:alert(1)' });
     timer.setSound({ volume: 2 });
     const reopened = open(env).timer.getState();
     expect(reopened.alert).toEqual({ soundSeconds: 20, effectSeconds: 10 });
-    expect(reopened.sound).toEqual({ enabled: true, volume: 0.7, url: 'https://example.test/ding.mp3' });
+    expect(reopened.sound).toEqual({ enabled: true, volume: 0.7, custom: true, source: 'url', url: 'https://example.test/ding.mp3', file: '' });
   });
 
   it('uses the set sound seconds for the alert', () => {

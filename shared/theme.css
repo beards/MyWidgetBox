@@ -300,4 +300,15 @@ html[data-theme='paper'] {
   .layout__language a:hover {
     color: var(--theme-accent);
   }
+
+  /* A short note under a control, e.g. where a picked sound file is kept. */
+  :where(.layout__panel, [data-controls]) .theme-note {
+    margin: 0;
+    font-size: 0.85em;
+    color: var(--theme-muted);
+  }
+
+  .theme-note:empty {
+    display: none;
+  }
 }

@@ -1,24 +1,55 @@
 // Opt-in sound module (ADR-0002). Built-in sounds are synthesized with Web Audio, so no file or network
-// request is needed; a Widget may let the user replace them with a sound URL.
+// request is needed; a Widget may let the user replace them with a sound URL or a file from their device.
+import { createStoredSoundFiles } from './sound-files';
 import { isHttpUrlOrEmpty } from './url';
 
 /** Built-in sounds: dice landing, one die hitting something (played per impact), a wheel tick, a timer alert. */
 export type BuiltInSound = 'diceLand' | 'diceHit' | 'tick' | 'alert';
+
+/** Where a custom sound comes from: a file picked from this device, or a URL. */
+export const SOUND_SOURCES = ['file', 'url'] as const;
+export type SoundSource = (typeof SOUND_SOURCES)[number];
 
 /** Sound part of a Widget's Settings, e.g. `DiceSettings.sound`. */
 export interface SoundSettings {
   enabled: boolean;
   /** 0 (silent) to 1 (full). */
   volume: number;
-  /** '' plays the built-in sound; otherwise an http(s) URL of a sound file played instead. */
+  /** Play the custom sound chosen by `source` instead of the built-in sound. */
+  custom: boolean;
+  source: SoundSource;
+  /**
+   * Id of a sound file picked from this device (see sound-files.ts), or ''. Only this browser has it:
+   * elsewhere (another device, OBS opened from a Share link) `url` plays instead, if any.
+   */
+  file: string;
+  /** http(s) URL of a sound file, or ''. */
   url: string;
 }
 
-export const soundDefaults: SoundSettings = { enabled: true, volume: 0.7, url: '' };
+export const soundDefaults: SoundSettings = { enabled: true, volume: 0.7, custom: false, source: 'file', file: '', url: '' };
+
+const MAX_FILE_ID_LENGTH = 64;
 
 export function isSoundSettings(value: unknown): value is SoundSettings {
-  const { enabled, volume, url } = (value ?? {}) as Partial<SoundSettings>;
-  return typeof enabled === 'boolean' && typeof volume === 'number' && volume >= 0 && volume <= 1 && isHttpUrlOrEmpty(url);
+  const { enabled, volume, custom, source, url, file } = (value ?? {}) as Partial<SoundSettings>;
+  return (
+    typeof enabled === 'boolean' &&
+    typeof volume === 'number' &&
+    volume >= 0 &&
+    volume <= 1 &&
+    typeof custom === 'boolean' &&
+    SOUND_SOURCES.includes(source as SoundSource) &&
+    isHttpUrlOrEmpty(url) &&
+    typeof file === 'string' &&
+    file.length <= MAX_FILE_ID_LENGTH
+  );
+}
+
+/** Sound files picked from this device, by id. */
+export interface SoundFileSource {
+  /** A URL playing the file, or null while it is still loading or when this browser does not have it. */
+  urlOf(id: string): string | null;
 }
 
 /** Where sounds actually come out; the Web Audio one is the default, tests pass a recording one. */
@@ -53,10 +84,32 @@ export interface SoundPlayer {
    * that stops it early.
    */
   repeat(sound: BuiltInSound, settings: SoundSettings, timing: { interval: number; duration: number }): () => void;
+  /** Stops the custom sound file of these Settings if it is still playing (e.g. the wheel has stopped). */
+  stop(settings: SoundSettings): void;
+  /** Whether a custom sound file (picked here, or from the URL) plays with these Settings rather than the built-in sound. */
+  hasFile(settings: SoundSettings): boolean;
 }
 
-/** `now` is the clock `repeat` measures its duration with (injectable for tests). */
-export function createSoundPlayer(output: SoundOutput = createWebAudioOutput(), now: () => number = Date.now): SoundPlayer {
+export interface SoundPlayerOptions {
+  /** Where sounds come out; Web Audio by default. */
+  output?: SoundOutput;
+  /** The clock `repeat` measures its duration with. */
+  now?: () => number;
+  /** Files picked from this device; IndexedDB by default. */
+  files?: SoundFileSource;
+}
+
+export function createSoundPlayer({
+  output = createWebAudioOutput(),
+  now = Date.now,
+  files = createStoredSoundFiles(),
+}: SoundPlayerOptions = {}): SoundPlayer {
+  /** The custom sound file to play ('' = the built-in sound); a picked file this browser lacks falls back to the URL. */
+  function fileUrl({ custom, source, file, url }: SoundSettings): string {
+    if (!custom) return '';
+    return (source === 'file' && file && files.urlOf(file)) || url;
+  }
+
   /** Sound is decoration: a blocked or broken output must never break the Widget. */
   function safely(action: () => void) {
     try {
@@ -66,25 +119,32 @@ export function createSoundPlayer(output: SoundOutput = createWebAudioOutput(), 
     }
   }
 
-  function play(sound: BuiltInSound, { enabled, volume, url }: SoundSettings) {
-    if (enabled && volume > 0) safely(() => output.play(sound, volume, url));
+  function play(sound: BuiltInSound, settings: SoundSettings) {
+    if (settings.enabled && settings.volume > 0) safely(() => output.play(sound, settings.volume, fileUrl(settings)));
   }
 
-  function loop({ enabled, volume, url }: SoundSettings, failed: () => void) {
-    if (!enabled || volume <= 0 || !url) return () => {};
-    safely(() => output.loop(url, volume, failed));
+  function loop(settings: SoundSettings, failed: () => void) {
+    const url = fileUrl(settings);
+    if (!settings.enabled || settings.volume <= 0 || !url) return () => {};
+    safely(() => output.loop(url, settings.volume, failed));
     return () => safely(() => output.stop(url));
   }
 
   return {
     play,
     loop,
-    preload({ enabled, url }) {
-      if (enabled && url) safely(() => output.preload(url));
+    stop(settings) {
+      const url = fileUrl(settings);
+      if (url) safely(() => output.stop(url));
+    },
+    hasFile: (settings) => fileUrl(settings) !== '',
+    preload(settings) {
+      const url = settings.enabled ? fileUrl(settings) : '';
+      if (url) safely(() => output.preload(url));
     },
     repeat(sound, settings, { interval, duration }) {
-      const builtIn = { ...settings, url: '' };
-      let looping = settings.url !== '';
+      const builtIn = { ...settings, custom: false };
+      let looping = fileUrl(settings) !== '';
       if (!looping) play(sound, builtIn);
       const stopFile = loop(settings, () => {
         looping = false;

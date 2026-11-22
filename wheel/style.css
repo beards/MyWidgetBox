@@ -333,3 +333,16 @@ body {
     aspect-ratio: auto;
   }
 }
+
+/*
+ * The custom sound playback choice: its heading, then one option per line. Indented by a radio
+ * button's own left margin (5px in Chromium and Firefox), so the heading lines up with the source
+ * radio buttons above and its options sit one step further in, as part of the custom sound.
+ */
+.wheel__sound-playback {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-left: 5px;
+}
+

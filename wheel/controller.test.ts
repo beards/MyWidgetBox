@@ -520,13 +520,28 @@ describe('wheel remove after draw', () => {
     const page = 'https://example.test/MyWidgetBox/wheel/';
     const env = createTestEnv({ url: page });
     const wheel = createWheelController(env);
-    wheel.setSound({ volume: 0.3, url: 'https://example.test/tick.mp3' });
+    wheel.setSound({ volume: 0.3, custom: true, source: 'url', url: 'https://example.test/tick.mp3' });
     wheel.setSound({ volume: 2 });
     wheel.setSound({ url: 'ftp://example.test/tick.mp3' });
-    const expected = { enabled: true, volume: 0.3, url: 'https://example.test/tick.mp3' };
+    const expected = { enabled: true, volume: 0.3, custom: true, source: 'url', url: 'https://example.test/tick.mp3', file: '' };
     expect(wheel.getState().sound).toEqual(expected);
     expect(createWheelController(env).getState().sound).toEqual(expected);
     expect(createWheelController(createTestEnv({ url: wheel.shareLink() })).getState().sound).toEqual(expected);
+  });
+});
+
+describe('wheel custom sound playback', () => {
+  it('loops a custom sound file by default, and can restart it at each sector instead', () => {
+    const page = 'https://example.test/MyWidgetBox/wheel/';
+    const env = createTestEnv({ url: page });
+    const wheel = createWheelController(env);
+    expect(wheel.getState().soundPlayback).toBe('loop');
+
+    wheel.setSoundPlayback('perSector');
+    wheel.setSoundPlayback('everyOtherSector' as never);
+    expect(wheel.getState().soundPlayback).toBe('perSector');
+    expect(createWheelController(env).getState().soundPlayback).toBe('perSector');
+    expect(createWheelController(createTestEnv({ url: wheel.shareLink() })).getState().soundPlayback).toBe('perSector');
   });
 });
 

@@ -328,22 +328,22 @@ describe('dice controller', () => {
 
   it('has sound on at a moderate volume with the built-in sound by default', () => {
     const dice = createDiceController(createTestEnv());
-    expect(dice.getState().sound).toEqual({ enabled: true, volume: 0.7, url: '' });
+    expect(dice.getState().sound).toEqual({ enabled: true, volume: 0.7, custom: false, source: 'file', url: '', file: '' });
   });
 
   it('can turn sound off, change the volume and use a custom sound URL', () => {
     const dice = createDiceController(createTestEnv());
     dice.setSound({ enabled: false });
     dice.setSound({ volume: 0.25 });
-    dice.setSound({ url: 'https://example.test/clack.mp3' });
-    expect(dice.getState().sound).toEqual({ enabled: false, volume: 0.25, url: 'https://example.test/clack.mp3' });
+    dice.setSound({ custom: true, source: 'url', url: 'https://example.test/clack.mp3' });
+    expect(dice.getState().sound).toEqual({ enabled: false, volume: 0.25, custom: true, source: 'url', url: 'https://example.test/clack.mp3', file: '' });
   });
 
   it('ignores invalid sound changes', () => {
     const dice = createDiceController(createTestEnv());
     dice.setSound({ volume: 2 });
     dice.setSound({ url: 'javascript:alert(1)' });
-    expect(dice.getState().sound).toEqual({ enabled: true, volume: 0.7, url: '' });
+    expect(dice.getState().sound).toEqual({ enabled: true, volume: 0.7, custom: false, source: 'file', url: '', file: '' });
   });
 
   it('has shake-to-roll off by default and remembers it after a reload', () => {
@@ -437,14 +437,14 @@ describe('dice Settings persistence and Presets', () => {
     const env = createTestEnv();
     const before = createDiceController(env);
     const first = before.getState().selectedPresetId!;
-    before.setSound({ volume: 0.3, url: 'https://example.test/clack.mp3' });
+    before.setSound({ volume: 0.3, custom: true, source: 'url', url: 'https://example.test/clack.mp3' });
     before.createPreset('Quiet');
     before.setSound({ enabled: false });
 
     const after = createDiceController(env);
     expect(after.getState().sound.enabled).toBe(false);
     after.selectPreset(first);
-    expect(after.getState().sound).toEqual({ enabled: true, volume: 0.3, url: 'https://example.test/clack.mp3' });
+    expect(after.getState().sound).toEqual({ enabled: true, volume: 0.3, custom: true, source: 'url', url: 'https://example.test/clack.mp3', file: '' });
   });
 
   it('keeps animation settings per Preset', () => {
@@ -767,10 +767,10 @@ describe('dice Share link', () => {
 
   it('carries the sound settings in a Share link', () => {
     const sharer = createDiceController(createTestEnv({ url: page }));
-    sharer.setSound({ enabled: false, volume: 0.4, url: 'https://example.test/clack.mp3' });
+    sharer.setSound({ enabled: false, volume: 0.4, custom: true, source: 'url', url: 'https://example.test/clack.mp3', file: '' });
 
     const opened = createDiceController(createTestEnv({ url: sharer.shareLink() }));
-    expect(opened.getState().sound).toEqual({ enabled: false, volume: 0.4, url: 'https://example.test/clack.mp3' });
+    expect(opened.getState().sound).toEqual({ enabled: false, volume: 0.4, custom: true, source: 'url', url: 'https://example.test/clack.mp3', file: '' });
   });
 
   function sharedD20Link() {

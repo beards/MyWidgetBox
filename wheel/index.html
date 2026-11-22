@@ -103,10 +103,12 @@
           <span data-i18n="soundVolume"></span>
           <input type="range" id="sound-volume" min="0" max="100" step="5" /> <output id="sound-volume-value" for="sound-volume"></output>
         </label>
-        <label class="wheel__row">
-          <span data-i18n="soundUrl"></span>
-          <input type="url" id="sound-url" />
-        </label>
+        <div class="sound-custom" id="sound-custom"></div>
+        <div class="wheel__sound-playback" role="radiogroup" aria-labelledby="sound-playback-label">
+          <span id="sound-playback-label" data-i18n="soundPlayback"></span>
+          <label class="wheel__row"><input type="radio" name="sound-playback" value="loop" /> <span data-i18n="soundPlaybackLoop"></span></label>
+          <label class="wheel__row"><input type="radio" name="sound-playback" value="perSector" /> <span data-i18n="soundPlaybackPerSector"></span></label>
+        </div>
 
         <div class="wheel__appearance" id="appearance"></div>
 

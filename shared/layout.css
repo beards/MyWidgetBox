@@ -220,3 +220,37 @@ html[data-panel-collapsed] .layout__panel > :not(.layout__panel-toggle) {
     font-family: var(--theme-font);
   }
 }
+
+/* The custom sound block every Widget's sound section has (mountSoundInputs in shared/widget-dom.ts). */
+.sound-custom,
+.sound-custom__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sound-custom__options {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sound-custom__choice,
+.sound-custom__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sound-custom__row input[type='url'] {
+  flex: 1;
+  min-width: 10rem;
+}
+
+/* Under its option's text, past the radio button. */
+.sound-custom__note {
+  padding-left: 1.75rem;
+}
+
