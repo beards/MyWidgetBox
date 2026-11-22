@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../shared/env';
 import { createTestEnv } from '../shared/test-env';
+import { THEME_STORAGE_KEY, writeTheme } from '../shared/theme';
 import {
   MAX_DURATION,
   TIMER_STATE_KEY,
@@ -891,5 +892,45 @@ describe('frame key', () => {
     after.timer.setTarget(after.id, '21:00');
     // Time up shows for an hour, then it counts down to the next day: 23:00:00 to 22:59:55.
     expect(countKeyedChanges(after, 10 * SECOND)).toBe(6);
+  });
+});
+
+describe('timer defaults follow the site theme', () => {
+  const look = ({ appearance }: { appearance: { background: { color: string }; textColor: string } }) => [
+    appearance.background.color,
+    appearance.textColor,
+  ];
+
+  it('starts with the colors of the theme in effect', () => {
+    const env = createTestEnv();
+    writeTheme(env.storage, 'dark');
+    expect(look(createTimerController(env).getState())).toEqual(['#121417', '#e8e9eb']);
+  });
+
+  it('follows a theme change while nothing is saved, and never changes saved Settings', () => {
+    const env = createTestEnv();
+    const timer = createTimerController(env);
+    env.storage.setItem(THEME_STORAGE_KEY, 'paper');
+    timer.followTheme();
+    expect(look(timer.getState())).toEqual(['#f6f1e7', '#2b241c']);
+
+    timer.setShowFraction(true);
+    writeTheme(env.storage, 'dark');
+    timer.followTheme();
+    expect(look(timer.getState())).toEqual(['#f6f1e7', '#2b241c']);
+  });
+
+  it('restores the defaults of the theme in effect, which then follow later theme changes', () => {
+    const env = createTestEnv();
+    const timer = createTimerController(env);
+    timer.setShowFraction(true);
+    writeTheme(env.storage, 'dark');
+    timer.restoreDefaults();
+    expect(look(timer.getState())).toEqual(['#121417', '#e8e9eb']);
+
+    writeTheme(env.storage, 'paper');
+    timer.followTheme();
+    expect(look(timer.getState())).toEqual(['#f6f1e7', '#2b241c']);
+    expect(look(createTimerController(env).getState())).toEqual(['#f6f1e7', '#2b241c']);
   });
 });

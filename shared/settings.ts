@@ -56,11 +56,20 @@ export interface SettingsStore<S> {
   getSnapshot(): SettingsSnapshot<S>;
   /**
    * Replaces the Settings in effect (the caller validates them). Saved to the selected
-   * Preset; Settings opened from the URL stay in memory only.
+   * Preset, which from then on keeps them whatever the defaults; Settings opened from the URL
+   * stay in memory only.
    */
   update(settings: S): void;
+  /**
+   * Puts the selected Preset back on the defaults (keeping its name): it stores no values and shows
+   * the defaults in effect, following setDefaults, until it is changed again. Settings opened from
+   * the URL become a copy of the defaults, in memory only.
+   */
+  restoreDefaults(): void;
   /** Saves the Settings in effect as a new Preset and selects it (also saves URL Settings). */
   createPreset(name: string): string;
+  /** Changes the defaults in effect (e.g. the site theme changed); only Presets on the defaults show them. */
+  setDefaults(defaults: S): void;
   /** Switches to a stored Preset; unknown ids are ignored. */
   selectPreset(id: string): void;
   renamePreset(id: string, name: string): void;
@@ -75,10 +84,11 @@ export interface SettingsStore<S> {
   importFile(text: string): boolean;
 }
 
+/** `settings: null` (stored as such): the Preset is on the defaults, whatever they are at the time. */
 interface Preset<S> {
   id: string;
   name: string;
-  settings: S;
+  settings: S | null;
 }
 
 interface StoredDocument<S> {
@@ -118,9 +128,10 @@ export function createSettingsStore<S extends object>(
   const key = settingsStorageKey(schema.namespace);
   const stored = readStorage();
   let doc: StoredDocument<S> = stored ?? {
-    presets: [{ id: '1', name: '', settings: schema.defaults }],
+    presets: [{ id: '1', name: '', settings: null }],
     selectedPresetId: '1',
   };
+  let defaults = schema.defaults;
   const fromUrl = readUrl();
   /** Settings opened from the URL; in memory only until saved as a Preset. */
   let urlSettings: S | null = fromUrl;
@@ -151,6 +162,7 @@ export function createSettingsStore<S extends object>(
     const version = data.version as number;
     const presets = data.presets.flatMap((entry: unknown): Preset<S>[] => {
       if (!isPlainObject(entry) || typeof entry.id !== 'string' || typeof entry.name !== 'string') return [];
+      if (entry.settings === null) return [{ id: entry.id, name: entry.name, settings: null }];
       const settings = parseSettings(schema, { version, settings: entry.settings });
       return settings ? [{ id: entry.id, name: entry.name, settings }] : [];
     });
@@ -170,23 +182,29 @@ export function createSettingsStore<S extends object>(
 
   const selected = () => doc.presets.find((preset) => preset.id === doc.selectedPresetId)!;
 
+  /** Replaces the selected Preset's Settings (null: on the defaults) and saves. */
+  function setSelected(settings: S | null) {
+    doc = {
+      ...doc,
+      presets: doc.presets.map((preset) => (preset.id === doc.selectedPresetId ? { ...preset, settings } : preset)),
+    };
+    save();
+  }
+
   return {
     getSnapshot: () => ({
-      settings: urlSettings ?? selected().settings,
+      settings: urlSettings ?? selected().settings ?? defaults,
       presets: doc.presets.map(({ id, name }) => ({ id, name })),
       selectedPresetId: urlSettings ? null : doc.selectedPresetId,
       source,
     }),
     update(settings) {
-      if (urlSettings) {
-        urlSettings = settings;
-        return;
-      }
-      doc = {
-        ...doc,
-        presets: doc.presets.map((preset) => (preset.id === doc.selectedPresetId ? { ...preset, settings } : preset)),
-      };
-      save();
+      if (urlSettings) urlSettings = settings;
+      else setSelected(settings);
+    },
+    restoreDefaults() {
+      if (urlSettings) urlSettings = defaults;
+      else setSelected(null);
     },
     createPreset(name) {
       const id = String(Math.max(0, ...doc.presets.map((preset) => Number(preset.id) || 0)) + 1);
@@ -195,6 +213,9 @@ export function createSettingsStore<S extends object>(
       doc = { presets: [...doc.presets, { id, name, settings }], selectedPresetId: id };
       save();
       return id;
+    },
+    setDefaults(next) {
+      defaults = next;
     },
     selectPreset(id) {
       if (!doc.presets.some((preset) => preset.id === id)) return;

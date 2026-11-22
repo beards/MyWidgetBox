@@ -10,6 +10,7 @@ import {
 } from '../shared/settings';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
 import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
+import { THEMES, THEME_COLORS, type Theme, readTheme } from '../shared/theme';
 
 export const DIE_SIDES = [4, 6, 8, 10, 12, 20, 100] as const;
 export type DieSides = (typeof DIE_SIDES)[number];
@@ -166,8 +167,10 @@ export interface DiceController {
   /** Changes some sound Settings; ignored if the result is invalid (volume outside 0–1, non-http(s) URL). */
   setSound(next: Partial<SoundSettings>): void;
   setShakeToRoll(enabled: boolean): void;
-  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. Ignored while rolling. */
+  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults, which then follow the site theme until the Preset is changed again; keeps the Preset's name. Ignored while rolling. */
   restoreDefaults(): void;
+  /** Call after the site theme changed: Presets on the defaults take its colors; changed Presets keep theirs. */
+  followTheme(): void;
   /** Saves the current Settings as a new Preset and switches to it. Ignored while rolling. */
   createPreset(name: string): void;
   /** Ignored while rolling. */
@@ -186,28 +189,43 @@ export interface DiceController {
 export const MAX_DICE_PER_KIND = 99;
 export const HISTORY_LIMIT = 20;
 
-export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
-  namespace: 'dice',
-  version: 1,
-  // Fields added later need no version bump: missing ones are filled from these defaults.
-  defaults: {
+/** The dice's own default colors in each site theme (the result text takes the theme's text color). */
+const DICE_THEME_COLORS: Record<Theme, { felt: string; die: string; pips: string; specialPips: string }> = {
+  soft: { felt: '#2e6b4f', die: '#f7f3e8', pips: '#1f1f1f', specialPips: '#c62828' },
+  dark: { felt: '#1f3d32', die: '#ece7da', pips: '#16181b', specialPips: '#d64545' },
+  paper: { felt: '#6e3a2c', die: '#fffaf0', pips: '#2b241c', specialPips: '#b5482f' },
+};
+
+/** The default Settings, in the colors of a site theme. */
+export function diceDefaults(theme: Theme): DiceSettings {
+  const { felt, die, pips, specialPips } = DICE_THEME_COLORS[theme];
+  return {
     diceSet: { groups: [{ sides: 6, count: 1 }], modifier: 0 },
     animation: { skip: false, alwaysFull: false },
     sound: soundDefaults,
     shakeToRoll: false,
     appearance: {
       ...textAppearanceDefaults,
-      // Felt in this green by default; the same color is used for a solid background.
-      background: { ...textAppearanceDefaults.background, kind: 'felt', color: '#2e6b4f' },
+      // Felt by default; the same color is used for a solid background.
+      background: { ...textAppearanceDefaults.background, kind: 'felt', color: felt },
+      textColor: THEME_COLORS[theme].text,
       fontSize: 48,
       showResultText: true,
       diceSize: 1,
-      dieColor: '#f7f3e8',
-      pipColor: '#1f1f1f',
+      dieColor: die,
+      pipColor: pips,
       tableBounce: 0.6,
-      specialPips: { enabled: true, values: [1, 4], color: '#c62828' },
+      specialPips: { enabled: true, values: [1, 4], color: specialPips },
     },
-  },
+  };
+}
+
+export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
+  namespace: 'dice',
+  version: 1,
+  // Fields added later need no version bump: missing ones are filled from the defaults (the store
+  // gets those of the site theme in effect; these are the default theme's).
+  defaults: diceDefaults(THEMES[0]),
   isValid: (settings): settings is DiceSettings =>
     isDiceSet((settings as DiceSettings).diceSet) &&
     isDiceAnimationSettings((settings as DiceSettings).animation) &&
@@ -274,7 +292,13 @@ export function createDiceController(
   env: Env,
   settingsOptions: SettingsStoreOptions = { readUrl: readShareLinkSettings },
 ): DiceController {
-  const settings = createSettingsStore(env, diceSettingsSchema, settingsOptions);
+  const theme = () => readTheme(env.storage);
+  const settings = createSettingsStore(env, { ...diceSettingsSchema, defaults: diceDefaults(theme()) }, settingsOptions);
+  /** Puts the selected Preset back on the defaults, in the colors of the site theme in effect. */
+  function restoreThemeDefaults() {
+    settings.setDefaults(diceDefaults(theme()));
+    settings.restoreDefaults();
+  }
   let state: DiceState = {
     ...fromSettings(),
     outcome: null,
@@ -394,8 +418,9 @@ export function createDiceController(
     },
     setShakeToRoll: (shakeToRoll) => updateSettings({ shakeToRoll }),
     restoreDefaults() {
-      if (!locked()) changeSettings(() => settings.update(diceSettingsSchema.defaults));
+      if (!locked()) changeSettings(() => restoreThemeDefaults());
     },
+    followTheme: () => changeSettings(() => settings.setDefaults(diceDefaults(theme()))),
     createPreset(name) {
       if (!locked()) changeSettings(() => settings.createPreset(name));
     },

@@ -10,11 +10,15 @@ const THEME_NAMES: Record<Locale, Record<Theme, string>> = {
 
 const SWITCHER_LABEL: Record<Locale, string> = { 'zh-Hant': '主題', en: 'Theme' };
 
-/** Appends a theme <select> to container; picking a theme applies it at once and remembers it. */
+/**
+ * Appends a theme <select> to container; picking a theme applies it at once, remembers it, then calls
+ * `onChange` (e.g. so a Widget's unsaved default colors follow the theme).
+ */
 export function mountThemeSwitcher<K extends string>(
   i18n: I18n<K>,
   storage: KeyValueStorage,
   container: HTMLElement,
+  onChange: (theme: Theme) => void = () => {},
 ): HTMLSelectElement {
   const select = document.createElement('select');
   const sync = (locale: Locale) => {
@@ -29,6 +33,7 @@ export function mountThemeSwitcher<K extends string>(
     const theme = select.value as Theme;
     writeTheme(storage, theme);
     document.documentElement.dataset.theme = theme;
+    onChange(theme);
   });
   container.append(select);
   return select;

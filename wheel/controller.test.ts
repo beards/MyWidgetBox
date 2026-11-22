@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Env } from '../shared/env';
 import { settingsStorageKey } from '../shared/settings';
 import { createTestEnv } from '../shared/test-env';
+import { writeTheme } from '../shared/theme';
 import {
   LABEL_SIZE_LIMIT_MAX,
   LABEL_SIZE_LIMIT_MIN,
@@ -661,3 +662,25 @@ function spinAndFinish(wheel: WheelController) {
 function labels(entries: { label: string }[]) {
   return entries.map((entry) => entry.label);
 }
+
+describe('wheel defaults follow the site theme', () => {
+  const look = ({ appearance }: WheelState) => [appearance.background.color, appearance.pointerColor];
+
+  it('starts with, follows and restores the colors of the theme in effect, never changing saved Settings', () => {
+    const env = createTestEnv();
+    writeTheme(env.storage, 'dark');
+    const wheel = createWheelController(env);
+    expect(look(wheel.getState())).toEqual(['#121417', '#e8e9eb']);
+
+    writeTheme(env.storage, 'paper');
+    wheel.followTheme();
+    expect(look(wheel.getState())).toEqual(['#f6f1e7', '#2b241c']);
+
+    wheel.setRemoveAfterDraw(true);
+    writeTheme(env.storage, 'soft');
+    wheel.followTheme();
+    expect(look(wheel.getState())).toEqual(['#f6f1e7', '#2b241c']);
+    wheel.restoreDefaults();
+    expect(look(wheel.getState())).toEqual(['#f4f6f8', '#1d2733']);
+  });
+});

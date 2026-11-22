@@ -16,6 +16,7 @@ import {
   readShareLinkSettings,
 } from '../shared/share-link';
 import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
+import { THEMES, THEME_COLORS, type Theme, readTheme } from '../shared/theme';
 
 export const TIMER_MODES = ['countdown', 'targetTime', 'stopwatch'] as const;
 /**
@@ -161,8 +162,10 @@ export interface TimerController {
   /** Replaces the appearance (applied live); invalid appearances are ignored. */
   setAppearance(appearance: ScaledAppearance): void;
   setShowFraction(on: boolean): void;
-  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. */
+  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults, which then follow the site theme until the Preset is changed again; keeps the Preset's name. */
   restoreDefaults(): void;
+  /** Call after the site theme changed: Presets on the defaults take its colors; changed Presets keep theirs. */
+  followTheme(): void;
   /** Saves the current Settings as a new Preset and switches to it. */
   createPreset(name: string): void;
   selectPreset(id: string): void;
@@ -207,18 +210,30 @@ function runConfig({ mode, duration, target }: TimerConfig): string {
 export const TARGET_TIME_UP_SPAN = 60 * 60 * 1000;
 const DEFAULT_TARGET = '21:00';
 
+/** The default Settings, in the colors of a site theme: its page background and text color. */
+export function timerDefaults(theme: Theme): TimerSettings {
+  const { background, text } = THEME_COLORS[theme];
+  return {
+    timers: [{ id: '1', name: '', mode: 'countdown', duration: 5 * 60 * 1000, target: DEFAULT_TARGET }],
+    showFraction: false,
+    appearance: {
+      ...scaledAppearanceDefaults,
+      background: { ...scaledAppearanceDefaults.background, color: background },
+      textColor: text,
+      fontSize: 96,
+    },
+    alert: { soundSeconds: 5, effectSeconds: 10 },
+    sound: soundDefaults,
+  };
+}
+
 export const timerSettingsSchema: SettingsSchema<TimerSettings> = {
   namespace: 'timer',
   version: 1,
-  // Fields added later need no version bump: missing ones are filled from these defaults
-  // (fields of each timer from the first default timer).
-  defaults: {
-    timers: [{ id: '1', name: '', mode: 'countdown', duration: 5 * 60 * 1000, target: DEFAULT_TARGET }],
-    showFraction: false,
-    appearance: { ...scaledAppearanceDefaults, fontSize: 96 },
-    alert: { soundSeconds: 5, effectSeconds: 10 },
-    sound: soundDefaults,
-  },
+  // Fields added later need no version bump: missing ones are filled from the defaults (fields of
+  // each timer from the first default timer; the store gets the defaults of the site theme in effect,
+  // these are the default theme's).
+  defaults: timerDefaults(THEMES[0]),
   isValid: (settings): settings is TimerSettings =>
     isTimerList((settings as TimerSettings).timers) &&
     typeof (settings as TimerSettings).showFraction === 'boolean' &&
@@ -386,7 +401,8 @@ export function createTimerController(
   env: Env,
   settingsOptions: SettingsStoreOptions = { readUrl: readShareLinkSettings },
 ): TimerController {
-  const settings = createSettingsStore(env, timerSettingsSchema, settingsOptions);
+  const theme = () => readTheme(env.storage);
+  const settings = createSettingsStore(env, { ...timerSettingsSchema, defaults: timerDefaults(theme()) }, settingsOptions);
   let runs: ScopedRuns = readRuns() ?? {};
   let state = build();
   const listeners = new Set<(state: TimerState) => void>();
@@ -581,7 +597,12 @@ export function createTimerController(
       publish();
     },
     // Runs are tagged with their timer's configuration, so ones that no longer fit end by themselves.
-    restoreDefaults: () => changeSettings(() => settings.update(timerSettingsSchema.defaults)),
+    restoreDefaults: () =>
+      changeSettings(() => {
+        settings.setDefaults(timerDefaults(theme()));
+        settings.restoreDefaults();
+      }),
+    followTheme: () => changeSettings(() => settings.setDefaults(timerDefaults(theme()))),
     selectPreset: (id) => changeSettings(() => settings.selectPreset(id)),
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
     deletePreset(id) {

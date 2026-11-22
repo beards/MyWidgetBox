@@ -19,6 +19,7 @@ import {
 import { readScopedState, stateScope, withoutPreset, writeScopedState } from '../shared/scoped-state';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
 import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
+import { THEMES, THEME_COLORS, type Theme, readTheme } from '../shared/theme';
 import { landingAngle } from './geometry';
 
 // Part of this controller's interface (the view and tests use them from here).
@@ -158,8 +159,10 @@ export interface WheelController {
   setAlwaysFullAnimation(always: boolean): void;
   /** Changes when the result pop-up goes away; invalid times are ignored. */
   setResult(next: Partial<WheelResultSettings>): void;
-  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults; keeps the Preset's name. Nothing stays drawn; ignored while animating. */
+  /** Replaces the Settings of the selected Preset (or of the Share link) with the defaults, which then follow the site theme until the Preset is changed again; keeps the Preset's name. Nothing stays drawn; ignored while animating. */
   restoreDefaults(): void;
+  /** Call after the site theme changed: Presets on the defaults take its colors; changed Presets keep theirs. */
+  followTheme(): void;
   /** Saves the current Settings as a new Preset (with nothing drawn yet) and switches to it; ignored while animating. */
   createPreset(name: string): void;
   /** Ignored while animating. */
@@ -201,19 +204,35 @@ const defaultEntries: WheelEntry[] = ['A', 'B', 'C', 'D', 'E', 'F'].map((label, 
   color: PALETTE[index % PALETTE.length]!,
 }));
 
-export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
-  namespace: 'wheel',
-  version: 1,
-  // Fields added later need no version bump: missing ones are filled from these defaults.
-  defaults: {
+/** The default Settings, in the colors of a site theme: its page background, and its text color for the pointer. */
+export function wheelDefaults(theme: Theme): WheelSettings {
+  const { background, text } = THEME_COLORS[theme];
+  return {
     entries: defaultEntries,
-    appearance: { ...appearanceDefaults, labelColor: '#ffffff', pointerColor: '#222222', labelDirection: 'across', limitLabelSize: true, maxLabelSize: 20, resultTextSize: 12 },
+    appearance: {
+      ...appearanceDefaults,
+      background: { ...appearanceDefaults.background, color: background },
+      labelColor: '#ffffff',
+      pointerColor: text,
+      labelDirection: 'across',
+      limitLabelSize: true,
+      maxLabelSize: 20,
+      resultTextSize: 12,
+    },
     animation: { duration: 5000, alwaysFull: false },
     removeAfterDraw: false,
     sound: soundDefaults,
     soundPlayback: 'loop',
     result: { autoHide: false, seconds: 4 },
-  },
+  };
+}
+
+export const wheelSettingsSchema: SettingsSchema<WheelSettings> = {
+  namespace: 'wheel',
+  version: 1,
+  // Fields added later need no version bump: missing ones are filled from the defaults (the store
+  // gets those of the site theme in effect; these are the default theme's).
+  defaults: wheelDefaults(THEMES[0]),
   isValid: (settings): settings is WheelSettings =>
     isEntryList((settings as WheelSettings).entries) &&
     isWheelAppearance((settings as WheelSettings).appearance) &&
@@ -302,7 +321,8 @@ export function createWheelController(
   env: Env,
   settingsOptions: SettingsStoreOptions = { readUrl: readShareLinkSettings },
 ): WheelController {
-  const settings = createSettingsStore(env, wheelSettingsSchema, settingsOptions);
+  const theme = () => readTheme(env.storage);
+  const settings = createSettingsStore(env, { ...wheelSettingsSchema, defaults: wheelDefaults(theme()) }, settingsOptions);
   /** Drawn entry ids by scope (see stateScope). */
   let drawnByScope: Record<string, string[]> = readDrawn() ?? {};
   let drawn: string[] = drawnByScope[scope()] ?? [];
@@ -453,11 +473,13 @@ export function createWheelController(
     },
     restoreDefaults() {
       if (state.animating) return;
-      settings.update(wheelSettingsSchema.defaults);
+      settings.setDefaults(wheelDefaults(theme()));
+      settings.restoreDefaults();
       // The drawn ids belonged to the replaced entries.
       setDrawn(() => []);
       update(fromSettings());
     },
+    followTheme: () => changeSettings(() => settings.setDefaults(wheelDefaults(theme()))),
     createPreset(name) {
       if (state.animating) return;
       settings.createPreset(name);

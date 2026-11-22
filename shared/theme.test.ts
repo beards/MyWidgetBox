@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTestEnv } from './test-env';
-import { THEME_STORAGE_KEY, THEMES, readTheme, writeTheme } from './theme';
+import { THEME_COLORS, THEME_STORAGE_KEY, THEMES, readTheme, writeTheme } from './theme';
 
 describe('theme', () => {
   it('defaults to soft when nothing is stored', () => {
@@ -38,4 +38,13 @@ describe('theme', () => {
       for (const theme of THEMES) expect(boot).toContain(`'${theme}'`);
     },
   );
+
+  it('gives Widgets the same page colors as theme.css', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'theme.css'), 'utf8');
+    for (const theme of THEMES) {
+      const block = css.slice(css.indexOf(`html[data-theme='${theme}']`));
+      expect(block.match(/--theme-bg: (#[0-9a-f]{6});/)?.[1]).toBe(THEME_COLORS[theme].background);
+      expect(block.match(/--theme-text: (#[0-9a-f]{6});/)?.[1]).toBe(THEME_COLORS[theme].text);
+    }
+  });
 });

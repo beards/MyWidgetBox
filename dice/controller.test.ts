@@ -3,6 +3,7 @@ import { type Env, createBrowserRandom } from '../shared/env';
 import { settingsStorageKey } from '../shared/settings';
 import { createShareLink } from '../shared/share-link';
 import { createTestEnv } from '../shared/test-env';
+import { writeTheme } from '../shared/theme';
 import {
   DIE_SIDES,
   type DiceAppearance,
@@ -594,12 +595,12 @@ describe('dice appearance Settings', () => {
     specialPips: { enabled: false, values: [6], color: '#0000ff' },
   };
 
-  it('opens with ivory dice with dark pips (red on the 1 and 4) on green felt', () => {
+  it('opens with ivory dice with dark pips (red on the 1 and 4) on green felt in the default theme', () => {
     expect(createDiceController(createTestEnv()).getState().appearance).toEqual({
       background: { kind: 'felt', color: '#2e6b4f', imageUrl: '' },
       fontFamily: '',
       fontSize: 48,
-      textColor: '#222222',
+      textColor: '#1d2733',
       showResultText: true,
       diceSize: 1,
       dieColor: '#f7f3e8',
@@ -882,3 +883,28 @@ function rollAndFinish(dice: DiceController) {
   dice.roll();
   dice.finishAnimation();
 }
+
+describe('dice defaults follow the site theme', () => {
+  const look = ({ appearance }: { appearance: DiceAppearance }) => [appearance.background.color, appearance.textColor];
+
+  it('starts with, follows and restores the colors of the theme in effect, never changing saved Settings', () => {
+    const env = createTestEnv();
+    writeTheme(env.storage, 'dark');
+    const dice = createDiceController(env);
+    const dark = look(dice.getState());
+    expect(dark[1]).toBe('#e8e9eb');
+
+    writeTheme(env.storage, 'paper');
+    dice.followTheme();
+    const paper = look(dice.getState());
+    expect(paper).not.toEqual(dark);
+    expect(paper[1]).toBe('#2b241c');
+
+    dice.setModifier(1);
+    writeTheme(env.storage, 'dark');
+    dice.followTheme();
+    expect(look(dice.getState())).toEqual(paper);
+    dice.restoreDefaults();
+    expect(look(dice.getState())).toEqual(dark);
+  });
+});

@@ -123,6 +123,63 @@ describe('Settings store', () => {
   });
 });
 
+describe('Settings store defaults', () => {
+  const black = { width: 20, look: { color: 'black' } };
+
+  it('keeps a fresh Preset on the defaults in effect, which can change (e.g. the site theme), without saving', () => {
+    const env = createTestEnv();
+    const store = createSettingsStore(env, schema);
+    store.setDefaults(black);
+    expect(store.getSnapshot()).toMatchObject({ settings: black, source: 'defaults' });
+    expect(env.storage.getItem(settingsStorageKey('sample'))).toBeNull();
+  });
+
+  it('a changed Preset keeps its own Settings; restoring the defaults puts it back on them, keeping its name and the others', () => {
+    const env = createTestEnv();
+    const store = createSettingsStore(env, schema);
+    store.update({ width: 5, look: { color: 'red' } });
+    store.renamePreset('1', 'Mine');
+    store.createPreset('Other');
+    store.update({ width: 9, look: { color: 'blue' } });
+    store.selectPreset('1');
+    store.setDefaults(black);
+    expect(store.getSnapshot().settings.width).toBe(5);
+
+    store.restoreDefaults();
+    expect(store.getSnapshot()).toMatchObject({ settings: black, presets: [{ name: 'Mine' }, { name: 'Other' }] });
+    store.setDefaults({ width: 30, look: { color: 'white' } });
+    expect(store.getSnapshot().settings.width).toBe(30);
+    store.selectPreset('2');
+    expect(store.getSnapshot().settings.width).toBe(9);
+  });
+
+  it('a Preset on the defaults stays on them after a reload and through export and import', () => {
+    const env = createTestEnv();
+    const store = createSettingsStore(env, schema);
+    store.update({ width: 5, look: { color: 'red' } });
+    store.restoreDefaults();
+    const exported = store.exportFile();
+
+    const reloaded = createSettingsStore(env, schema);
+    reloaded.setDefaults(black);
+    expect(reloaded.getSnapshot().settings).toEqual(black);
+
+    const imported = createSettingsStore(createTestEnv(), schema);
+    imported.update({ width: 7, look: { color: 'red' } });
+    expect(imported.importFile(exported)).toBe(true);
+    imported.setDefaults(black);
+    expect(imported.getSnapshot().settings).toEqual(black);
+  });
+
+  it('restoring the defaults of Settings opened from the URL keeps them in memory', () => {
+    const env = createTestEnv();
+    const store = createSettingsStore(env, schema, { readUrl: () => ({ version: 3, settings: { width: 7 } }) });
+    store.restoreDefaults();
+    expect(store.getSnapshot()).toMatchObject({ settings: { width: 10 }, selectedPresetId: null });
+    expect(env.storage.getItem(settingsStorageKey('sample'))).toBeNull();
+  });
+});
+
 describe('Settings store URL layer', () => {
   const urlLayer = (url: URL): VersionedSettings | null => {
     const raw = url.searchParams.get('s');

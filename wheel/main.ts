@@ -39,7 +39,8 @@ const wheel = createWheelController(env);
 const i18n = createI18n(env, messages, { browserLanguage: navigator.language });
 bindStaticText(i18n);
 mountLanguageSwitcher(i18n, document.querySelector<HTMLElement>('#language')!);
-mountThemeSwitcher(i18n, env.storage, document.querySelector<HTMLElement>('#language')!);
+// A Widget whose Settings were never saved takes the new theme's default colors.
+mountThemeSwitcher(i18n, env.storage, document.querySelector<HTMLElement>('#language')!, () => wheel.followTheme());
 mountPanelToggle(document.querySelector<HTMLButtonElement>('#panel-toggle')!);
 const t = i18n.t;
 
