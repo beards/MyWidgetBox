@@ -12,8 +12,9 @@ export interface SettingsSchema<S extends object> {
   version: number;
   defaults: S;
   /**
-   * Checks Settings that already have missing fields filled from `defaults` and unknown
-   * fields dropped. Returning false makes the whole layer (URL, stored Preset) fall through.
+   * Checks Settings that already have missing fields filled from `defaults` (array items from
+   * the first default item) and unknown fields dropped. Returning false makes the whole layer
+   * (URL, stored Preset) fall through.
    */
   isValid(settings: unknown): settings is S;
 }
@@ -233,17 +234,25 @@ export function createSettingsStore<S extends object>(
 
 /**
  * Missing fields are taken from defaults, unknown fields are dropped; nested plain objects
- * are filled recursively. Arrays and other values are taken as they are.
+ * are filled recursively, and so is each item of an array whose default holds plain objects
+ * (from the first default item). Other values are taken as they are. This is what lets a
+ * field be added later, anywhere in the Settings, without a version bump.
  */
 function fillFromDefaults(defaults: object, value: unknown): unknown {
   if (!isPlainObject(value)) return value;
   const filled: Record<string, unknown> = {};
   for (const [field, fallback] of Object.entries(defaults)) {
-    if (!(field in value)) filled[field] = fallback;
-    else if (isPlainObject(fallback)) filled[field] = fillFromDefaults(fallback, value[field]);
-    else filled[field] = value[field];
+    filled[field] = field in value ? fillLike(fallback, value[field]) : fallback;
   }
   return filled;
+}
+
+function fillLike(fallback: unknown, value: unknown): unknown {
+  if (isPlainObject(fallback)) return fillFromDefaults(fallback, value);
+  if (Array.isArray(fallback) && isPlainObject(fallback[0]) && Array.isArray(value)) {
+    return value.map((item) => fillFromDefaults(fallback[0] as object, item));
+  }
+  return value;
 }
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {

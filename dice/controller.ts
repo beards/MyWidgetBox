@@ -1,4 +1,4 @@
-import { type Appearance, appearanceDefaults, isAppearance, isHexColor } from '../shared/appearance';
+import { type TextAppearance, isHexColor, isTextAppearance, textAppearanceDefaults } from '../shared/appearance';
 import type { Env } from '../shared/env';
 import { randomBelow } from '../shared/random';
 import {
@@ -38,8 +38,8 @@ export interface DiceOutcome {
   total: number;
 }
 
-/** The shared appearance baseline (with the dice backdrops as background kinds) plus the dice's own items (also used by the 3D view). */
-export interface DiceAppearance extends Appearance<DiceBackdrop> {
+/** The shared text appearance (with the dice backdrops as background kinds; the text is the result text) plus the dice's own items (also used by the 3D view). */
+export interface DiceAppearance extends TextAppearance<DiceBackdrop> {
   /** Whether the result text (total and breakdown) shows over the dice. */
   showResultText: boolean;
   /** How big the dice look, as a factor of the normal size (DICE_SIZE_RANGE). */
@@ -194,9 +194,9 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
     sound: soundDefaults,
     shakeToRoll: false,
     appearance: {
-      ...appearanceDefaults,
+      ...textAppearanceDefaults,
       // Felt in this green by default; the same color is used for a solid background.
-      background: { ...appearanceDefaults.background, kind: 'felt', color: '#2e6b4f' },
+      background: { ...textAppearanceDefaults.background, kind: 'felt', color: '#2e6b4f' },
       fontSize: 48,
       showResultText: true,
       diceSize: 1,
@@ -217,7 +217,7 @@ export const diceSettingsSchema: SettingsSchema<DiceSettings> = {
 function isDiceAppearance(value: unknown): value is DiceAppearance {
   const { fontSize, showResultText, diceSize, dieColor, pipColor, tableBounce, specialPips } = (value ?? {}) as Partial<DiceAppearance>;
   return (
-    isAppearance(value, DICE_BACKDROPS) &&
+    isTextAppearance(value, DICE_BACKDROPS) &&
     (fontSize ?? 0) >= RESULT_TEXT_SIZE_RANGE.min &&
     typeof showResultText === 'boolean' &&
     typeof diceSize === 'number' &&

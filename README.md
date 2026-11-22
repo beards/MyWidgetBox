@@ -55,7 +55,8 @@ shared/             opt-in modules any Widget may use
   i18n-dom.ts       binds data-i18n attributes and mounts the language switcher
   share-link.ts     Share link encoding/decoding (?s=, display, transparent, lang)
   display-mode.ts   Display mode: hides [data-controls] elements
-  appearance.ts     appearance Settings baseline (background solid/transparent/image, font, size, scale); Widgets extend it
+  scoped-state.ts   State kept per Preset under one storage key (wheel draws, timer runs)
+  appearance.ts     appearance Settings baseline (background solid/transparent/image, font; text size and color, scale for Widgets that have them); Widgets extend it
   appearance-dom.ts applies an appearance to the page and mounts the appearance panel
   layout.css        side-by-side page layout on wide screens (display left, controls right)
 dice/               one directory per Widget, served at /<name>/

@@ -31,7 +31,7 @@ export interface ApplyAppearanceOptions {
  * A Widget applies its own items (e.g. colors) itself.
  */
 export function applyAppearance(
-  { background, fontFamily, fontSize, textColor, scale }: Appearance<string> & Partial<Pick<ScaledAppearance, 'scale'>>,
+  { background, fontFamily, fontSize, textColor, scale }: PanelAppearance,
   targets: AppearanceTargets,
   { forceTransparent = false }: ApplyAppearanceOptions = {},
 ): void {
@@ -46,8 +46,8 @@ export function applyAppearance(
 
   const display = targets.display.style;
   display.fontFamily = fontFamily;
-  display.fontSize = `${fontSize}px`;
-  display.color = textColor;
+  display.fontSize = fontSize === undefined ? '' : `${fontSize}px`;
+  display.color = textColor ?? '';
   display.zoom = scale === undefined ? '' : String(scale);
 }
 
@@ -59,15 +59,15 @@ export interface AppearanceColorField<A> {
   quickColors?: boolean;
 }
 
-/** What the panel edits: the baseline with any background kinds, and the zoom when the Widget has one. */
-type PanelAppearance = Appearance<string> & Partial<Pick<ScaledAppearance, 'scale'>>;
+/** What the panel edits: the baseline with any background kinds, plus the text items and the zoom when the Widget has them. */
+type PanelAppearance = Appearance<string> & Partial<Pick<ScaledAppearance, 'fontSize' | 'textColor' | 'scale'>>;
 
 export interface AppearancePanelOptions<A extends PanelAppearance> {
   i18n: I18n<AppearanceMessageKey>;
   fields?: AppearanceColorField<A>[];
-  /** False for a Widget that sizes its text another way. */
+  /** False for a Widget without the text size (its Appearance is not a TextAppearance). */
   fontSize?: boolean;
-  /** False for a Widget whose display has no text the shared text color would color. */
+  /** False for a Widget without the text color (its Appearance is not a TextAppearance). */
   textColor?: boolean;
   /** False for a Widget that offers its own background choice (placed right after the heading). */
   background?: boolean;
@@ -255,15 +255,19 @@ export function mountAppearancePanel<A extends PanelAppearance>(
   }
   syncs.push(syncFont);
 
-  const fontSize = input('range', { min: String(fontSizeRange.min), max: String(fontSizeRange.max), step: '1' });
-  const fontSizeValue = document.createElement('output');
-  row('fontSize', () => t('fontSize'), fontSize, fontSizeValue).hidden = !showFontSize;
-  syncs.push(() => (fontSizeValue.textContent = current ? `${current.fontSize}px` : ''));
-  bind(
-    fontSize,
-    (element, appearance) => ({ ...appearance, fontSize: element.valueAsNumber }),
-    (element, appearance) => (element.value = String(appearance.fontSize)),
-  );
+  if (showFontSize) mountFontSize();
+
+  function mountFontSize() {
+    const fontSize = input('range', { min: String(fontSizeRange.min), max: String(fontSizeRange.max), step: '1' });
+    const fontSizeValue = document.createElement('output');
+    row('fontSize', () => t('fontSize'), fontSize, fontSizeValue);
+    syncs.push(() => (fontSizeValue.textContent = current?.fontSize === undefined ? '' : `${current.fontSize}px`));
+    bind(
+      fontSize,
+      (element, appearance) => ({ ...appearance, fontSize: element.valueAsNumber }),
+      (element, appearance) => (element.value = String(appearance.fontSize)),
+    );
+  }
 
   /** One-click white and black buttons that set `key` to that color. */
   const quickColors = (key: string) =>
@@ -282,14 +286,17 @@ export function mountAppearancePanel<A extends PanelAppearance>(
       return button;
     });
 
-  const textColor = input('color');
-  row('textColor', () => t('textColor'), textColor, ...(textColorQuickColors ? quickColors('textColor') : [])).hidden =
-    !showTextColor;
-  bind(
-    textColor,
-    (element, appearance) => ({ ...appearance, textColor: element.value }),
-    (element, appearance) => (element.value = appearance.textColor),
-  );
+  if (showTextColor) mountTextColor();
+
+  function mountTextColor() {
+    const textColor = input('color');
+    row('textColor', () => t('textColor'), textColor, ...(textColorQuickColors ? quickColors('textColor') : []));
+    bind(
+      textColor,
+      (element, appearance) => ({ ...appearance, textColor: element.value }),
+      (element, appearance) => (element.value = appearance.textColor ?? ''),
+    );
+  }
 
   if (showScale) mountScale();
 

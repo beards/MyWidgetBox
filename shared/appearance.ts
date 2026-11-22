@@ -23,18 +23,26 @@ export interface Background<K extends string = BackgroundKind> {
   imageUrl: string;
 }
 
+/** What every Widget offers: the page background and the display's font. */
 export interface Appearance<K extends string = BackgroundKind> {
   background: Background<K>;
   /** CSS font-family list, or '' for the page default. */
   fontFamily: string;
+}
+
+/**
+ * The baseline plus the size and color of the display's text, for a Widget whose display is text
+ * (the dice result, the timer digits); the wheel sizes and colors its text its own way.
+ */
+export interface TextAppearance<K extends string = BackgroundKind> extends Appearance<K> {
   /** Text size in CSS px. */
   fontSize: number;
   /** `#rrggbb` text color of the display. */
   textColor: string;
 }
 
-/** The baseline plus a zoom, for a Widget whose display is plain DOM (the dice size their 3D scene instead). */
-export interface ScaledAppearance extends Appearance {
+/** The text baseline plus a zoom, for a Widget whose display is plain DOM (the dice size their 3D scene instead). */
+export interface ScaledAppearance extends TextAppearance {
   /** Overall zoom factor of the Widget's display. */
   scale: number;
 }
@@ -46,11 +54,11 @@ export const MAX_FONT_FAMILY_LENGTH = 200;
 export const appearanceDefaults: Appearance = {
   background: { kind: 'solid', color: '#ffffff', imageUrl: '' },
   fontFamily: '',
-  fontSize: 20,
-  textColor: '#222222',
 };
 
-export const scaledAppearanceDefaults: ScaledAppearance = { ...appearanceDefaults, scale: 1 };
+export const textAppearanceDefaults: TextAppearance = { ...appearanceDefaults, fontSize: 20, textColor: '#222222' };
+
+export const scaledAppearanceDefaults: ScaledAppearance = { ...textAppearanceDefaults, scale: 1 };
 
 export function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
@@ -64,7 +72,7 @@ export function isAppearance<K extends string = BackgroundKind>(
   value: unknown,
   kinds: readonly K[] = BACKGROUND_KINDS as readonly string[] as readonly K[],
 ): value is Appearance<K> {
-  const { background, fontFamily, fontSize, textColor } = (value ?? {}) as Partial<Appearance<K>>;
+  const { background, fontFamily } = (value ?? {}) as Partial<Appearance<K>>;
   return (
     typeof background === 'object' &&
     background !== null &&
@@ -72,14 +80,21 @@ export function isAppearance<K extends string = BackgroundKind>(
     isHexColor(background.color) &&
     isHttpUrlOrEmpty(background.imageUrl) &&
     typeof fontFamily === 'string' &&
-    fontFamily.length <= MAX_FONT_FAMILY_LENGTH &&
-    inRange(fontSize, FONT_SIZE_RANGE) &&
-    isHexColor(textColor)
+    fontFamily.length <= MAX_FONT_FAMILY_LENGTH
   );
 }
 
+/** isAppearance plus the text items. */
+export function isTextAppearance<K extends string = BackgroundKind>(
+  value: unknown,
+  kinds: readonly K[] = BACKGROUND_KINDS as readonly string[] as readonly K[],
+): value is TextAppearance<K> {
+  const { fontSize, textColor } = (value ?? {}) as Partial<TextAppearance<K>>;
+  return isAppearance(value, kinds) && inRange(fontSize, FONT_SIZE_RANGE) && isHexColor(textColor);
+}
+
 export function isScaledAppearance(value: unknown): value is ScaledAppearance {
-  return isAppearance(value) && inRange((value as Partial<ScaledAppearance>).scale, SCALE_RANGE);
+  return isTextAppearance(value) && inRange((value as Partial<ScaledAppearance>).scale, SCALE_RANGE);
 }
 
 function inRange(value: unknown, { min, max }: { min: number; max: number }): value is number {

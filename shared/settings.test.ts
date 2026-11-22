@@ -51,6 +51,26 @@ describe('Settings store', () => {
     expect(createSettingsStore(env, schema).getSnapshot().settings).toEqual({ width: 5, look: { color: 'red' } });
   });
 
+  it('fills missing fields of array items from the first default item', () => {
+    interface ListSettings {
+      items: { id: string; size: number }[];
+    }
+    const listSchema: SettingsSchema<ListSettings> = {
+      namespace: 'list',
+      version: 1,
+      defaults: { items: [{ id: 'a', size: 1 }, { id: 'b', size: 2 }] },
+      isValid: (settings): settings is ListSettings =>
+        (settings as ListSettings).items.every((item) => typeof item.id === 'string' && typeof item.size === 'number'),
+    };
+
+    expect(parseSettings(listSchema, { version: 1, settings: { items: [{ id: 'x' }, { id: 'y', size: 5, extra: true }] } })).toEqual({
+      items: [
+        { id: 'x', size: 1 },
+        { id: 'y', size: 5 },
+      ],
+    });
+  });
+
   it('falls back to defaults when the Settings are unreadable or written with another version', () => {
     for (const stored of [storeDocument(3, 'not an object'), storeDocument(2, { width: 1 }), storeDocument(4, { width: 1 })]) {
       const env = createTestEnv();

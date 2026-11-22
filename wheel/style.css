@@ -14,7 +14,7 @@ body {
   padding: 1rem 0;
 }
 
-/* Font and text color come from the appearance Settings (applied inline). */
+/* The font comes from the appearance Settings (applied inline). */
 .wheel__display {
   position: relative;
   display: grid;
@@ -83,6 +83,7 @@ body {
 
 .wheel__all-drawn {
   margin: 0;
+  font-size: 1.25rem;
   padding: 0.4em 0.9em;
   border-radius: 0.5em;
   background: rgb(0 0 0 / 0.7);

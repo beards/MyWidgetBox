@@ -14,9 +14,9 @@ import {
   type SettingsSchema,
   type SettingsStoreOptions,
   createSettingsStore,
-  isPlainObject,
   serializeSettings,
 } from '../shared/settings';
+import { readScopedState, stateScope, withoutPreset, writeScopedState } from '../shared/scoped-state';
 import { type ShareLinkOptions, createShareLink, readShareLinkSettings } from '../shared/share-link';
 import { type SoundSettings, isSoundSettings, soundDefaults } from '../shared/sound';
 import { landingAngle } from './geometry';
@@ -168,15 +168,6 @@ export interface WheelController {
 
 /** Storage key of the State (drawn entries), separate from the Settings. */
 export const WHEEL_STATE_KEY = 'mywidgetbox:wheel:state';
-const STATE_VERSION = 1;
-
-/**
- * Drawn entries are kept per Preset (and one scope for Settings opened from a Share link),
- * so entry ids reused in another Preset never show as drawn there.
- */
-function drawnScope(selectedPresetId: string | null): string {
-  return selectedPresetId === null ? 'shared' : `preset:${selectedPresetId}`;
-}
 
 export const MAX_ENTRIES = 100;
 export const MAX_LABEL_LENGTH = 100;
@@ -301,7 +292,7 @@ export function createWheelController(
   settingsOptions: SettingsStoreOptions = { readUrl: readShareLinkSettings },
 ): WheelController {
   const settings = createSettingsStore(env, wheelSettingsSchema, settingsOptions);
-  /** Drawn entry ids by scope (see drawnScope). */
+  /** Drawn entry ids by scope (see stateScope). */
   let drawnByScope: Record<string, string[]> = readDrawn() ?? {};
   let drawn: string[] = drawnByScope[scope()] ?? [];
   let lastRemaining: WheelEntry[] = [];
@@ -309,27 +300,12 @@ export function createWheelController(
   const listeners = new Set<(state: WheelState) => void>();
 
   function scope() {
-    return drawnScope(settings.getSnapshot().selectedPresetId);
+    return stateScope(settings.getSnapshot().selectedPresetId);
   }
 
   /** The stored draws; null if storage cannot be read at all (then the in-memory ones stay). */
   function readDrawn(): Record<string, string[]> | null {
-    let raw: string | null;
-    try {
-      raw = env.storage.getItem(WHEEL_STATE_KEY);
-    } catch {
-      return null;
-    }
-    try {
-      const data: unknown = JSON.parse(raw ?? 'null');
-      if (!isPlainObject(data)) return {};
-      if (data.version !== STATE_VERSION || !isPlainObject(data.scopes)) return {};
-      return Object.fromEntries(
-        Object.entries(data.scopes).flatMap(([key, list]) => (Array.isArray(list) ? [[key, ids(list)]] : [])),
-      );
-    } catch {
-      return {};
-    }
+    return readScopedState(env, WHEEL_STATE_KEY, (list) => (Array.isArray(list) ? ids(list) : null));
   }
 
   /** Changes the drawn entries of the Settings in effect, re-reading storage first so draws made meanwhile in another tab survive. */
@@ -342,11 +318,7 @@ export function createWheelController(
   }
 
   function writeDrawn() {
-    try {
-      env.storage.setItem(WHEEL_STATE_KEY, JSON.stringify({ version: STATE_VERSION, scopes: drawnByScope }));
-    } catch {
-      // Storage full or unavailable: keep working from memory.
-    }
+    writeScopedState(env, WHEEL_STATE_KEY, drawnByScope);
   }
 
   // Another tab drew or reset. Mid-spin the wheel must not change; finishAnimation catches up.
@@ -483,7 +455,12 @@ export function createWheelController(
     },
     renamePreset: (id, name) => changeSettings(() => settings.renamePreset(id, name)),
     deletePreset(id) {
-      if (!state.animating) changeSettings(() => settings.deletePreset(id));
+      if (state.animating) return;
+      changeSettings(() => settings.deletePreset(id));
+      if (!settings.getSnapshot().presets.some((preset) => preset.id === id)) {
+        drawnByScope = withoutPreset(readDrawn() ?? drawnByScope, id);
+        writeDrawn();
+      }
     },
     shareLink: (options) =>
       createShareLink(env.url, serializeSettings(wheelSettingsSchema, settings.getSnapshot().settings), options),

@@ -296,8 +296,6 @@ describe('wheel Settings, Presets and Share link', () => {
   const custom: WheelAppearance = {
     background: { kind: 'solid', color: '#102030', imageUrl: '' },
     fontFamily: 'Georgia, serif',
-    fontSize: 28,
-    textColor: '#eeeeee',
     labelColor: '#000000',
     pointerColor: '#ff0000',
     labelDirection: 'along',
@@ -551,6 +549,24 @@ describe('wheel drawn State scope', () => {
     expect(labels(wheel.getState().remainingEntries)).toEqual(['a', 'b']);
     wheel.selectPreset(first);
     expect(labels(wheel.getState().remainingEntries)).toEqual(['b']);
+  });
+
+  it('deleting a Preset drops its drawn entries from storage', () => {
+    const env = createTestEnv({ random: [0, 0] });
+    const wheel = wheelWith(env, twoEntries);
+    wheel.setRemoveAfterDraw(true);
+    wheel.createPreset('Copy');
+    const copy = wheel.getState().selectedPresetId!;
+    spinAndFinish(wheel);
+
+    wheel.deletePreset(copy);
+    expect(Object.keys(JSON.parse(env.storage.getItem(WHEEL_STATE_KEY)!).scopes)).not.toContain(`preset:${copy}`);
+  });
+
+  it('keeps no text size or color: the wheel sizes and colors its text itself', () => {
+    const { appearance } = createWheelController(createTestEnv()).getState();
+    expect(appearance).not.toHaveProperty('fontSize');
+    expect(appearance).not.toHaveProperty('textColor');
   });
 
   it("a Share link opened in the same browser does not show the stored Preset's draws", () => {

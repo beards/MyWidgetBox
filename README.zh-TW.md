@@ -55,7 +55,8 @@ shared/             任何 Widget 都可以選用的共用模組
   i18n-dom.ts       綁定 data-i18n 屬性並掛載語言切換器
   share-link.ts     Share link 編碼／解碼（?s=、display、transparent、lang）
   display-mode.ts   Display mode：隱藏 [data-controls] 元素
-  appearance.ts     外觀 Settings 的共用基礎（背景 純色／透明／圖片、字型、大小、縮放）；各 Widget 可擴充
+  scoped-state.ts   依 Preset 分開存放的 State，共用一個儲存 key（轉盤抽過的項目、計時器進度）
+  appearance.ts     外觀 Settings 的共用基礎（背景 純色／透明／圖片、字型；需要的 Widget 再加文字大小與顏色、縮放）；各 Widget 可擴充
   appearance-dom.ts 把外觀套用到頁面，並掛載外觀面板
   layout.css        寬螢幕的並排版面（顯示區在左、控制項在右）
 dice/               每個 Widget 一個目錄，網址為 /<name>/

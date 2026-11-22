@@ -8,6 +8,7 @@ import {
   isPlainObject,
   serializeSettings,
 } from '../shared/settings';
+import { readScopedState, stateScope, withoutPreset, writeScopedState } from '../shared/scoped-state';
 import {
   type ShareLinkOptions,
   createShareLink,
@@ -183,23 +184,14 @@ export const MAX_ALERT_EFFECT_SECONDS = 3600;
 
 /** Storage key of the State (running timers), separate from the Settings. */
 export const TIMER_STATE_KEY = 'mywidgetbox:timer:state';
-const STATE_VERSION = 1;
 
 /** A run as stored, with the timer configuration it was started for (see runConfig). */
 interface StoredRun extends TimerRun {
   config: string;
 }
 
-/** Stored runs by scope (see runScope), then by timer id. */
+/** Stored runs by scope (see stateScope), then by timer id. */
 type ScopedRuns = Record<string, Record<string, StoredRun>>;
-
-/**
- * Runs are kept per Preset (and one scope for Settings opened from a Share link), so a timer
- * id reused in another Preset or Share link never shows someone else's progress.
- */
-function runScope(selectedPresetId: string | null): string {
-  return selectedPresetId === null ? 'shared' : `preset:${selectedPresetId}`;
-}
 
 /** What a run depends on; a run started for another value of this is treated as idle. */
 function runConfig({ mode, duration, target }: TimerConfig): string {
@@ -218,8 +210,8 @@ const DEFAULT_TARGET = '21:00';
 export const timerSettingsSchema: SettingsSchema<TimerSettings> = {
   namespace: 'timer',
   version: 1,
-  // Note: fields inside `timers` entries are not filled from defaults (arrays are taken
-  // whole), so stored timers missing a field are not read.
+  // Fields added later need no version bump: missing ones are filled from these defaults
+  // (fields of each timer from the first default timer).
   defaults: {
     timers: [{ id: '1', name: '', mode: 'countdown', duration: 5 * 60 * 1000, target: DEFAULT_TARGET }],
     showFraction: false,
@@ -387,7 +379,7 @@ export function frameKey(
 /**
  * Headless timer logic: no DOM, all outside-world access goes through env.
  * Settings carried by a Share link in env.url take priority over stored ones; the State
- * (how far each timer has run) is stored under its own key, by Preset (runScope) and timer id,
+ * (how far each timer has run) is stored under its own key, by Preset (stateScope) and timer id,
  * and kept in step with other tabs.
  */
 export function createTimerController(
@@ -400,7 +392,7 @@ export function createTimerController(
   const listeners = new Set<(state: TimerState) => void>();
 
   function scope() {
-    return runScope(settings.getSnapshot().selectedPresetId);
+    return stateScope(settings.getSnapshot().selectedPresetId);
   }
 
   function configOf(id: string) {
@@ -409,34 +401,13 @@ export function createTimerController(
 
   /** The stored runs; null if storage cannot be read at all (then the in-memory ones stay). */
   function readRuns(): ScopedRuns | null {
-    let raw: string | null;
-    try {
-      raw = env.storage.getItem(TIMER_STATE_KEY);
-    } catch {
-      return null;
-    }
-    try {
-      const data: unknown = JSON.parse(raw ?? 'null');
-      if (!isPlainObject(data)) return {};
-      if (data.version !== STATE_VERSION || !isPlainObject(data.scopes)) return {};
-      return Object.fromEntries(
-        Object.entries(data.scopes)
-          .filter(([, byId]) => isPlainObject(byId))
-          .map(([key, byId]) => [key, validRuns(byId as Record<string, unknown>, isStoredRun)]),
-      );
-    } catch {
-      return {};
-    }
+    return readScopedState(env, TIMER_STATE_KEY, (byId) => (isPlainObject(byId) ? validRuns(byId, isStoredRun) : null));
   }
 
   /** Re-reads the stored runs before writing, so changes made meanwhile in another tab survive. */
   function writeRuns(change: (current: ScopedRuns) => ScopedRuns) {
     runs = change(readRuns() ?? runs);
-    try {
-      env.storage.setItem(TIMER_STATE_KEY, JSON.stringify({ version: STATE_VERSION, scopes: runs }));
-    } catch {
-      // Storage full or unavailable: keep working from memory.
-    }
+    writeScopedState(env, TIMER_STATE_KEY, runs);
   }
 
   /** Sets runs of the Settings in effect, each tagged with the configuration it applies to. */
@@ -606,7 +577,7 @@ export function createTimerController(
       // The new Preset holds the same timers, so it takes over their runs.
       const from = scope();
       const id = settings.createPreset(name);
-      writeRuns((current) => ({ ...current, [runScope(id)]: { ...current[from] } }));
+      writeRuns((current) => ({ ...current, [stateScope(id)]: { ...current[from] } }));
       publish();
     },
     // Runs are tagged with their timer's configuration, so ones that no longer fit end by themselves.
@@ -617,7 +588,7 @@ export function createTimerController(
       const before = settings.getSnapshot().presets.length;
       settings.deletePreset(id);
       if (settings.getSnapshot().presets.length < before) {
-        writeRuns((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== runScope(id))));
+        writeRuns((current) => withoutPreset(current, id));
       }
       publish();
     },
