@@ -23,42 +23,84 @@ export function isSoundSettings(value: unknown): value is SoundSettings {
 
 /** Where sounds actually come out; the Web Audio one is the default, tests pass a recording one. */
 export interface SoundOutput {
-  /** Plays `url` if it is not '', with `sound` as the fallback when the file cannot be played. */
+  /**
+   * Plays `url` if it is not '', with `sound` as the fallback when the file cannot be played.
+   * A file is one voice: playing it again restarts it instead of layering another copy.
+   */
   play(sound: BuiltInSound, volume: number, url: string): void;
+  /** Plays the file at `url` over and over until stop(url); calls `failed` if it cannot be played. */
+  loop(url: string, volume: number, failed: () => void): void;
+  /** Stops the file at `url` if it is playing (built-in sounds are short and play out). */
+  stop(url: string): void;
+  /** Starts loading the file at `url`, so its first play is on time. */
+  preload(url: string): void;
 }
 
 export interface SoundPlayer {
-  /** Plays once with these Settings; silent when they turn sound off. Never throws. */
+  /** Plays once with these Settings; silent when they turn sound off. Never throws (nor do the others). */
   play(sound: BuiltInSound, settings: SoundSettings): void;
   /**
-   * Plays now and then every `interval` ms while less than `duration` ms have passed on the clock (e.g. a timer alert).
-   * Returns a function that stops it early.
+   * Loops the custom sound file of these Settings until the returned function is called (e.g. while
+   * the wheel turns). Does nothing without a file or with sound off; calls `failed` when the file
+   * cannot be played, so the caller can use the built-in sound instead.
+   */
+  loop(settings: SoundSettings, failed: () => void): () => void;
+  /** Loads the custom sound file of these Settings ahead of its first play; call it whenever they may have changed. */
+  preload(settings: SoundSettings): void;
+  /**
+   * Sounds for `duration` ms on the clock (e.g. a timer alert): a custom file loops, the built-in sound
+   * (also when the file cannot be played) plays now and then every `interval` ms. Returns a function
+   * that stops it early.
    */
   repeat(sound: BuiltInSound, settings: SoundSettings, timing: { interval: number; duration: number }): () => void;
 }
 
 /** `now` is the clock `repeat` measures its duration with (injectable for tests). */
 export function createSoundPlayer(output: SoundOutput = createWebAudioOutput(), now: () => number = Date.now): SoundPlayer {
-  function play(sound: BuiltInSound, { enabled, volume, url }: SoundSettings) {
-    if (!enabled || volume <= 0) return;
+  /** Sound is decoration: a blocked or broken output must never break the Widget. */
+  function safely(action: () => void) {
     try {
-      output.play(sound, volume, url);
+      action();
     } catch {
-      // Sound is decoration: a blocked or broken output must never break the Widget.
+      // Ignored on purpose.
     }
+  }
+
+  function play(sound: BuiltInSound, { enabled, volume, url }: SoundSettings) {
+    if (enabled && volume > 0) safely(() => output.play(sound, volume, url));
+  }
+
+  function loop({ enabled, volume, url }: SoundSettings, failed: () => void) {
+    if (!enabled || volume <= 0 || !url) return () => {};
+    safely(() => output.loop(url, volume, failed));
+    return () => safely(() => output.stop(url));
   }
 
   return {
     play,
+    loop,
+    preload({ enabled, url }) {
+      if (enabled && url) safely(() => output.preload(url));
+    },
     repeat(sound, settings, { interval, duration }) {
+      const builtIn = { ...settings, url: '' };
+      let looping = settings.url !== '';
+      if (!looping) play(sound, builtIn);
+      const stopFile = loop(settings, () => {
+        looping = false;
+        play(sound, builtIn);
+      });
       // Measured by the clock, not by counting ticks: background tabs fire intervals late.
       const start = now();
-      play(sound, settings);
       const id = setInterval(() => {
-        if (now() - start >= duration) return clearInterval(id);
-        play(sound, settings);
+        if (now() - start >= duration) return end();
+        if (!looping) play(sound, builtIn);
       }, interval);
-      return () => clearInterval(id);
+      function end() {
+        clearInterval(id);
+        stopFile();
+      }
+      return end;
     },
   };
 }
@@ -77,22 +119,47 @@ export function createWebAudioOutput(): SoundOutput {
     return context;
   }
 
+  /**
+   * One media element per file, kept loaded: a media element plays cross-origin files without
+   * CORS (unlike fetch + decodeAudioData), and reusing it means the file is fetched and decoded
+   * once, so later plays start at once instead of piling up late.
+   */
+  const files = new Map<string, HTMLAudioElement>();
+  function file(url: string) {
+    let audio = files.get(url);
+    if (!audio) {
+      audio = new Audio(url);
+      files.set(url, audio);
+    }
+    return audio;
+  }
+
+  /** Plays a file from the start; `failed` runs if it cannot be played. */
+  function start(url: string, volume: number, loop: boolean, failed: () => void) {
+    const audio = file(url);
+    audio.loop = loop;
+    audio.volume = volume;
+    audio.currentTime = 0;
+    audio.play().catch((error: unknown) => {
+      // Only an unreachable or undecodable file fails (and is loaded afresh next time); blocked by
+      // autoplay rules or cut short by stop(), it just stays silent.
+      if (!audio.error && !(error instanceof DOMException && error.name === 'NotSupportedError')) return;
+      files.delete(url);
+      failed();
+    });
+  }
+
   return {
     play(sound, volume, url) {
-      if (url) playUrl(url, volume, () => synthesize(getContext(), sound, volume));
+      if (url) start(url, volume, false, () => synthesize(getContext(), sound, volume));
       else synthesize(getContext(), sound, volume);
     },
+    loop: (url, volume, failed) => start(url, volume, true, failed),
+    stop(url) {
+      files.get(url)?.pause();
+    },
+    preload: (url) => void file(url),
   };
-}
-
-/** A media element plays cross-origin files without CORS, unlike fetch + decodeAudioData. */
-function playUrl(url: string, volume: number, fallback: () => void) {
-  const audio = new Audio(url);
-  audio.volume = volume;
-  audio.play().catch((error: unknown) => {
-    // Blocked by autoplay rules: stay silent. Unreachable or undecodable file: fall back to the built-in sound.
-    if (!(error instanceof DOMException && error.name === 'NotAllowedError')) fallback();
-  });
 }
 
 function synthesize(context: AudioContext, sound: BuiltInSound, volume: number) {

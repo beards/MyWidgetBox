@@ -73,6 +73,8 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let playing: WheelOutcome | null = null;
 /** True while the scene is still playing it (a reset stops it early). */
 let inFlight = false;
+/** Stops the custom sound file looping while the wheel turns. */
+let stopSpinSound = () => {};
 /** What the editor and the wheel were last rendered from, so they are rebuilt only when it changes. */
 let renderedEntries: WheelEntry[] | null = null;
 let renderedDrawn: string[] | null = null;
@@ -163,6 +165,8 @@ function hideResult() {
 
 function render(state: WheelState) {
   const { entries, appearance, outcome, history, animating, remainingEntries, allDrawn } = state;
+  // A custom sound file is loaded ahead, so the first tick is not late.
+  sound.preload(state.sound);
   applyAppearance(appearance, { page: document.documentElement, display }, { forceTransparent: displayOptions.transparent });
   scene.setColors({ label: appearance.labelColor, pointer: appearance.pointerColor });
   result.style.color = appearance.labelColor;
@@ -194,14 +198,22 @@ function render(state: WheelState) {
   if (inFlight && !animating) {
     inFlight = false;
     scene.stop();
+    stopSpinSound();
   }
   if (animating && outcome && outcome !== playing) {
     playing = outcome;
     inFlight = true;
     hideResult();
-    const onTick = () => sound.play('tick', wheel.getState().sound);
+    // A custom sound file loops while the wheel turns, whatever the sectors; the built-in tick
+    // (also when the file cannot be played) sounds at each sector boundary.
+    let ticks = state.sound.url === '';
+    stopSpinSound = sound.loop(state.sound, () => (ticks = true));
+    const onTick = () => {
+      if (ticks) sound.play('tick', { ...wheel.getState().sound, url: '' });
+    };
     scene.play(outcome.angle, { ...animationFor(state, reducedMotion.matches), onTick }, () => {
       inFlight = false;
+      stopSpinSound();
       wheel.finishAnimation();
       showResult(outcome);
     });

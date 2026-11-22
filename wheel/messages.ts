@@ -120,9 +120,9 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     drawn: 'drawn',
     allDrawn: 'All entries have been drawn. Reset to start over.',
     sound: 'Sound',
-    soundEnabled: 'Tick while the wheel spins',
+    soundEnabled: 'Sound while the wheel spins',
     soundVolume: 'Volume',
-    soundUrl: 'Custom tick sound URL (empty = built-in)',
+    soundUrl: 'Custom sound URL, looped while spinning (empty = built-in tick)',
   },
   'zh-Hant': {
     ...appearanceMessages['zh-Hant'],
@@ -182,8 +182,8 @@ export const messages: MessageTables<WheelMessageKey | AppearanceMessageKey> = {
     drawn: '已抽',
     allDrawn: '所有選項都已抽完，請按「重置」重新開始。',
     sound: '音效',
-    soundEnabled: '轉動時播放喀喀聲',
+    soundEnabled: '轉動時播放音效',
     soundVolume: '音量',
-    soundUrl: '自訂喀喀聲網址（留空＝內建音效）',
+    soundUrl: '自訂音效網址，轉動時循環播放（留空＝內建喀喀聲）',
   },
 };

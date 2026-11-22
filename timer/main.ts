@@ -264,6 +264,8 @@ const cards = new Map<string, TimerCard>();
 
 function render(state: TimerState) {
   const { appearance } = state;
+  // A custom alert file is loaded ahead, so it sounds right at time up.
+  sound.preload(state.sound);
   // Display mode can be limited to one timer (`?timer=<id>`); the others get no card.
   const timers = visibleTimers(state.timers, env.url);
   applyAppearance(appearance, { page: document.documentElement, display: list }, { forceTransparent: displayOptions.transparent });

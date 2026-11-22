@@ -144,6 +144,8 @@ function renderAddSides() {
 
 function render(state: DiceState) {
   const { diceSet, appearance, outcome, history, animating } = state;
+  // A custom sound file is loaded ahead, so the first impact is not late.
+  sound.preload(state.sound);
   // The felt pattern is a large data URL, so the page background is only repainted when it changes.
   const background = JSON.stringify(appearance.background);
   const backgroundChanged = background !== shownBackground;

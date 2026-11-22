@@ -1,13 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type SoundOutput, createSoundPlayer, isSoundSettings, soundDefaults } from './sound';
 
-function createRecordingOutput() {
+/** Records what would sound; with `filesFail`, every file fails to play (as an unreachable URL would). */
+function createRecordingOutput({ filesFail = false } = {}) {
   const played: { sound: string; volume: number }[] = [];
+  const looped: string[] = [];
+  const stopped: string[] = [];
+  const preloaded: string[] = [];
   const output: SoundOutput = {
     play: (sound, volume, url) => void played.push({ sound: url || sound, volume }),
+    loop: (url, _volume, failed) => (filesFail ? failed() : void looped.push(url)),
+    stop: (url) => void stopped.push(url),
+    preload: (url) => void preloaded.push(url),
   };
-  return { output, played };
+  return { output, played, looped, stopped, preloaded };
 }
+
+const file = { ...soundDefaults, url: 'https://example.test/cry.wav' };
 
 describe('sound player', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -36,12 +45,13 @@ describe('sound player', () => {
   });
 
   it('never throws when the output fails (e.g. blocked by autoplay rules)', () => {
-    const player = createSoundPlayer({
-      play: () => {
-        throw new Error('NotAllowedError');
-      },
-    });
+    const fail = () => {
+      throw new Error('NotAllowedError');
+    };
+    const player = createSoundPlayer({ play: fail, loop: fail, stop: fail, preload: fail });
     expect(() => player.play('diceLand', soundDefaults)).not.toThrow();
+    expect(() => player.loop(file, () => {})()).not.toThrow();
+    expect(() => player.preload(file)).not.toThrow();
   });
 
   it('repeats a sound every interval for the given duration', () => {
@@ -71,6 +81,65 @@ describe('sound player', () => {
     stop();
     vi.advanceTimersByTime(10_000);
     expect(played).toHaveLength(2);
+  });
+});
+
+describe('custom sound files', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('loads the file ahead of its first play, unless sound is off or built in', () => {
+    const { output, preloaded } = createRecordingOutput();
+    const player = createSoundPlayer(output);
+    player.preload(file);
+    player.preload({ ...file, enabled: false });
+    player.preload(soundDefaults);
+    expect(preloaded).toEqual([file.url]);
+  });
+
+  it('loops a file until stopped (e.g. while the wheel turns)', () => {
+    const { output, looped, stopped } = createRecordingOutput();
+    const stop = createSoundPlayer(output).loop(file, () => {});
+    expect(looped).toEqual([file.url]);
+    stop();
+    expect(stopped).toEqual([file.url]);
+  });
+
+  it('loops nothing without a file or with sound off', () => {
+    const { output, looped } = createRecordingOutput();
+    const player = createSoundPlayer(output);
+    player.loop(soundDefaults, () => {})();
+    player.loop({ ...file, enabled: false }, () => {})();
+    expect(looped).toEqual([]);
+  });
+
+  it('reports a file that cannot be looped, so the caller can use the built-in sound', () => {
+    const { output } = createRecordingOutput({ filesFail: true });
+    let failed = false;
+    createSoundPlayer(output).loop(file, () => (failed = true));
+    expect(failed).toBe(true);
+  });
+
+  it('a repetition loops a file for its duration instead of restarting it', () => {
+    const { output, played, looped, stopped } = createRecordingOutput();
+    createSoundPlayer(output).repeat('alert', file, { interval: 1000, duration: 3000 });
+    vi.advanceTimersByTime(2000);
+    expect({ played, looped, stopped }).toEqual({ played: [], looped: [file.url], stopped: [] });
+    vi.advanceTimersByTime(2000);
+    expect(stopped).toEqual([file.url]);
+  });
+
+  it('stopping a repetition early stops its file', () => {
+    const { output, stopped } = createRecordingOutput();
+    createSoundPlayer(output).repeat('alert', file, { interval: 1000, duration: 10_000 })();
+    expect(stopped).toEqual([file.url]);
+  });
+
+  it('a repetition whose file cannot be played repeats the built-in sound instead', () => {
+    const { output, played } = createRecordingOutput({ filesFail: true });
+    createSoundPlayer(output).repeat('alert', file, { interval: 1000, duration: 3000 });
+    vi.advanceTimersByTime(5000);
+    expect(played.map((entry) => entry.sound)).toEqual(['alert', 'alert', 'alert']);
   });
 });
 
