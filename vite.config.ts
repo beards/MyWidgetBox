@@ -6,9 +6,9 @@ import { configDefaults, defineConfig } from 'vitest/config';
 const widgets = ['dice', 'wheel', 'timer'];
 
 export default defineConfig({
-  // GitHub Pages serves the site from the root of https://mywidgetbox.github.io/;
-  // dev and preview use the same base so URLs match production.
-  base: '/',
+  // Relative base: the same build works from a site root (https://mywidgetbox.github.io/)
+  // and from a sub-path (a project Pages site such as /MyWidgetBox/).
+  base: './',
   // Multi-page: serve each directory's index.html instead of falling back to the root page.
   appType: 'mpa',
   // Agent worktrees live under .claude/; keep them out of test runs.

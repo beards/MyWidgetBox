@@ -32,7 +32,7 @@ npm run dev        # dev server at http://localhost:5173/ (catalog), .../dice/, 
 npm test           # run tests once (npm run test:watch to watch)
 npm run typecheck
 npm run lint
-npm run build      # production build into dist/ (base path /)
+npm run build      # production build into dist/ (relative base: works from any path)
 npm run preview    # serve the production build
 ```
 
